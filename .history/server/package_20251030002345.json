@@ -1,0 +1,11 @@
+{
+  "name": "pm-logbook-server",
+  "version": "1.0.0",
+  "description": "Backend server for PM Logbook",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  }
+}
+

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test</title>
+</head>
+<body>
+    <h1>PM Logbook API Test</h1>
+    <div id="result"></div>
+    
+    <script>
+        console.log('Testing API connection...');
+        
+        // Test backend API
+        fetch('http://localhost:5001/api/users')
+            .then(response => {
+                console.log('API Response:', response);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Users:', data);
+                document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            })
+            .catch(error => {
+                console.error('API Error:', error);
+                document.getElementById('result').innerHTML = '<p style="color: red;">Error: ' + error.message + '</p>';
+            });
+    </script>
+</body>
+</html>
+
