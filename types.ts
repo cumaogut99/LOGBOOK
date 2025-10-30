@@ -18,7 +18,13 @@ export interface NavItem {
 export interface Document {
     id?: number;
     fileName: string;
-    fileData: Blob;
+    fileData: Blob | string;
+    fileType?: string;
+    fileSize?: number;
+    relatedType?: 'test' | 'fault' | 'swap' | 'maintenance';
+    relatedId?: number;
+    uploadedBy?: string;
+    uploadedAt?: string;
 }
 
 export enum Severity {
@@ -27,15 +33,48 @@ export enum Severity {
   Critical = 'Critical'
 }
 
+export interface TestType {
+    id?: number;
+    name: string;
+    description?: string;
+    createdBy: string;
+    createdAt: string;
+}
+
+export interface BrakeType {
+    id?: number;
+    name: string;
+    description?: string;
+    createdBy: string;
+    createdAt: string;
+}
+
+export interface MaintenancePlan {
+    id?: number;
+    engineId: number;
+    planType: string;
+    description: string;
+    scheduledDate: string;
+    dueHours?: number;
+    dueCycles?: number;
+    status: 'Pending' | 'Approved' | 'Completed' | 'Rejected';
+    createdBy: string;
+    createdAt: string;
+    approvedBy?: string;
+    approvedAt?: string;
+}
+
 export interface Test {
     id?: number;
     engineId: number;
     testType: string;
+    brakeType?: string;
     testCell: string;
     description: string;
     duration: number;
     testDate: string;
     documentId?: number;
+    documents?: Document[];
     userName: string;
 }
 
@@ -48,6 +87,7 @@ export interface Fault {
     reportDate: string;
     status: 'Open' | 'Closed';
     documentId?: number;
+    documents?: Document[];
     userName: string;
 }
 
@@ -57,7 +97,10 @@ export interface SwapActivity {
     componentInstalledId: number;
     componentRemovedId: number;
     swapDate: string;
+    swapType: 'Component' | 'Assembly';
+    assemblyGroup?: string;
     documentId?: number;
+    documents?: Document[];
     userName: string;
 }
 
