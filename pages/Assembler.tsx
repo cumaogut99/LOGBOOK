@@ -3,11 +3,11 @@ import { useQuery, useRefetch } from '../hooks/useData';
 import { swapsApi, enginesApi, inventoryApi } from '../lib/client.ts';
 import { documentsApi as newDocsApi } from '../lib/newApis.ts';
 import { useAuth } from '../hooks/useAuth';
-import type { SwapActivity } from '../types';
+import type { SwapActivity, Component, InventoryItem } from '../types';
 import { PencilIcon, TrashIcon, PaperclipIcon } from '../constants';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { showSuccess, showError } from '../utils/toast';
+import { showSuccess, showError, showWarning } from '../utils/toast';
 
 // Assembly groups definition
 const ASSEMBLY_GROUPS = [
@@ -20,6 +20,50 @@ const ASSEMBLY_GROUPS = [
     'Mechanical Assembly',
     'Other'
 ];
+
+// Helper: Replace a component in the tree by ID
+function replaceComponentInTree(
+    components: Component[],
+    removeId: number,
+    newComponent: Component
+): Component[] {
+    return components.map(comp => {
+        if (comp.id === removeId) {
+            return newComponent;
+        }
+        if (comp.children) {
+            return {
+                ...comp,
+                children: replaceComponentInTree(comp.children, removeId, newComponent)
+            };
+        }
+        return comp;
+    });
+}
+
+// Helper: Find component by serial number (for finding in inventory)
+function findComponentBySerial(components: Component[], serialNumber: string): Component | undefined {
+    for (const comp of components) {
+        if (comp.serialNumber === serialNumber) return comp;
+        if (comp.children) {
+            const found = findComponentBySerial(comp.children, serialNumber);
+            if (found) return found;
+        }
+    }
+    return undefined;
+}
+
+// Helper: Convert inventory item to component
+function inventoryToComponent(item: InventoryItem, engineTotalHours: number): Component {
+    return {
+        id: item.id!,
+        description: item.description,
+        partNumber: item.partNumber,
+        serialNumber: item.serialNumber,
+        currentHours: engineTotalHours, // Sync with engine hours
+        lifeLimit: 0 // Will be set from inventory if available
+    };
+}
 
 const Assembler: React.FC = () => {
     const { user } = useAuth();
@@ -57,11 +101,27 @@ const Assembler: React.FC = () => {
         }
         
         try {
+            const engineId = parseInt(swapState.engineId);
+            const installedId = parseInt(swapState.installId);
+            const removedId = parseInt(swapState.removeId);
+            
+            // Get engine
+            const engine = engines?.find(e => e.id === engineId);
+            if (!engine) {
+                throw new Error('Engine not found');
+            }
+            
+            // Get component from inventory
+            const inventoryItem = inventory?.find(i => i.id === installedId);
+            if (!inventoryItem) {
+                throw new Error('Component not found in inventory');
+            }
+            
             // Create swap activity
             const createdSwap = await swapsApi.create({
-                engineId: parseInt(swapState.engineId),
-                componentInstalledId: parseInt(swapState.installId),
-                componentRemovedId: parseInt(swapState.removeId),
+                engineId: engineId,
+                componentInstalledId: installedId,
+                componentRemovedId: removedId,
                 swapDate: new Date().toISOString(),
                 swapType: swapState.swapType,
                 assemblyGroup: swapState.swapType === 'Assembly' ? swapState.assemblyGroup : undefined,
@@ -79,12 +139,24 @@ const Assembler: React.FC = () => {
                 }
             }
             
+            // Update engine components
+            const newComponent = inventoryToComponent(inventoryItem, engine.totalHours);
+            const updatedComponents = replaceComponentInTree(
+                engine.components,
+                removedId,
+                newComponent
+            );
+            
+            await enginesApi.update(engineId, {
+                components: updatedComponents
+            });
+            
             setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '' });
             setUploadedFiles([]);
-            showSuccess(`${swapState.swapType} swap completed successfully!`);
+            showSuccess(`${swapState.swapType} swap completed! Motor components güncellendi.`);
             refetch();
         } catch (error) {
-            showError('Failed to perform swap');
+            showError(error instanceof Error ? error.message : 'Failed to perform swap');
             console.error(error);
         }
     };
@@ -228,6 +300,17 @@ const Assembler: React.FC = () => {
                                 </option>
                             ))}
                         </select>
+                        
+                        {/* Swap Information */}
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-md p-3 text-sm">
+                            <p className="font-semibold text-yellow-400 mb-2">⚠️ Swap İşlemi:</p>
+                            <ul className="list-disc list-inside text-brand-light ml-2 space-y-1">
+                                <li>Çıkarılan parça motor'dan kaldırılacak</li>
+                                <li>Takılan parça motor'a eklenecek</li>
+                                <li>Takılan parçanın saati <strong>motor saati ile senkronize edilecek</strong></li>
+                                <li>Swap kaydı activity log'a eklenecek</li>
+                            </ul>
+                        </div>
                         
                         {/* Document Upload */}
                         <div>

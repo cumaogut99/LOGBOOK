@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Engine, User, Test, Fault, SwapActivity, InventoryItem, Document } from '../types.ts';
+import type { Engine, User, Test, Fault, SwapActivity, InventoryItem, Document, ActivityLogItem } from '../types.ts';
 
 // In development, Vite proxy will handle /api requests
 // In production, we need to use the full URL
@@ -46,6 +46,11 @@ export const enginesApi = {
   
   getById: async (id: number): Promise<Engine> => {
     const response = await api.get(`/engines/${id}`);
+    return response.data;
+  },
+  
+  getActivities: async (id: number): Promise<ActivityLogItem[]> => {
+    const response = await api.get(`/engines/${id}/activities`);
     return response.data;
   },
   

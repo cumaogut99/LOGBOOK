@@ -123,10 +123,6 @@ router.post('/engines', async (req, res) => {
 
 router.put('/engines/:id', async (req, res) => {
   try {
-    console.log('=== ENGINE UPDATE REQUEST ===');
-    console.log('Engine ID:', req.params.id);
-    console.log('Request Body:', JSON.stringify(req.body, null, 2));
-    
     // Önce mevcut engine'i al
     const existingEngine = await dbGet('SELECT * FROM engines WHERE id = ?', [req.params.id]);
     if (!existingEngine) {
@@ -147,8 +143,6 @@ router.put('/engines/:id', async (req, res) => {
       }
     });
 
-    console.log('Updates:', Object.keys(updates));
-
     // UPDATE query'sini dinamik oluştur
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -157,8 +151,6 @@ router.put('/engines/:id', async (req, res) => {
     const setClauses = Object.keys(updates).map(key => `${key} = ?`).join(', ');
     const values = [...Object.values(updates), req.params.id];
 
-    console.log('SQL:', `UPDATE engines SET ${setClauses} WHERE id = ?`);
-
     await dbRun(
       `UPDATE engines SET ${setClauses} WHERE id = ?`,
       values
@@ -166,12 +158,8 @@ router.put('/engines/:id', async (req, res) => {
 
     // Güncellenmiş engine'i döndür
     const updatedEngine = await dbGet('SELECT * FROM engines WHERE id = ?', [req.params.id]);
-    console.log('Update successful!');
     res.json(parseEngine(updatedEngine));
   } catch (err) {
-    console.error('=== ENGINE UPDATE ERROR ===');
-    console.error('Error:', err.message);
-    console.error('Stack:', err.stack);
     res.status(500).json({ error: err.message });
   }
 });
@@ -478,68 +466,6 @@ router.delete('/documents/:id', async (req, res) => {
   try {
     await dbRun('DELETE FROM documents WHERE id = ?', [req.params.id]);
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// =============== ENGINE ACTIVITY LOG ===============
-// Get activity log for a specific engine (combining tests, faults, swaps)
-router.get('/engines/:id/activities', async (req, res) => {
-  try {
-    const engineId = parseInt(req.params.id);
-    
-    // Get tests
-    const tests = await dbAll('SELECT * FROM tests WHERE engineId = ? ORDER BY testDate DESC', [engineId]);
-    
-    // Get faults
-    const faults = await dbAll('SELECT * FROM faults WHERE engineId = ? ORDER BY reportDate DESC', [engineId]);
-    
-    // Get swaps
-    const swaps = await dbAll('SELECT * FROM swaps WHERE engineId = ? ORDER BY swapDate DESC', [engineId]);
-    
-    // Combine and format activities
-    const activities = [];
-    
-    // Add tests
-    tests.forEach(test => {
-      activities.push({
-        type: 'Test',
-        details: `${test.testType} (${test.testCell})`,
-        date: test.testDate,
-        duration: test.duration,
-        id: test.id,
-        fullData: test
-      });
-    });
-    
-    // Add faults
-    faults.forEach(fault => {
-      activities.push({
-        type: 'Fault',
-        details: fault.description,
-        date: fault.reportDate,
-        severity: fault.severity,
-        id: fault.id,
-        fullData: fault
-      });
-    });
-    
-    // Add swaps
-    swaps.forEach(swap => {
-      activities.push({
-        type: 'Swap',
-        details: `Component Swap (ID: ${swap.componentInstalledId} → ${swap.componentRemovedId})`,
-        date: swap.swapDate,
-        id: swap.id,
-        fullData: swap
-      });
-    });
-    
-    // Sort by date (newest first)
-    activities.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    res.json(activities);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

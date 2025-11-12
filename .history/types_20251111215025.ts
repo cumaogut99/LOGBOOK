@@ -132,20 +132,6 @@ export interface ActivityLogItem {
   duration?: number;
 }
 
-export interface BuildReportHistory {
-  id?: number;
-  engineId: number;
-  uploadDate: string;
-  uploadedBy: string;
-  fileName: string;
-  components: Component[];
-  changesSummary?: {
-    added: number;
-    updated: number;
-    removed: number;
-  };
-}
-
 export interface Engine {
   id?: number;
   model: string;
@@ -158,5 +144,4 @@ export interface Engine {
   location?: string;
   components: Component[];
   activityLog: ActivityLogItem[];
-  buildReportHistory?: BuildReportHistory[];
 }

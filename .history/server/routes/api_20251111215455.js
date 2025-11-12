@@ -123,55 +123,13 @@ router.post('/engines', async (req, res) => {
 
 router.put('/engines/:id', async (req, res) => {
   try {
-    console.log('=== ENGINE UPDATE REQUEST ===');
-    console.log('Engine ID:', req.params.id);
-    console.log('Request Body:', JSON.stringify(req.body, null, 2));
-    
-    // Önce mevcut engine'i al
-    const existingEngine = await dbGet('SELECT * FROM engines WHERE id = ?', [req.params.id]);
-    if (!existingEngine) {
-      return res.status(404).json({ error: 'Engine not found' });
-    }
-
-    // Sadece gönderilen alanları güncelle (partial update)
-    const updates = {};
-    const fields = ['model', 'serialNumber', 'status', 'totalHours', 'totalCycles', 'nextServiceDue', 'manufacturer', 'location', 'components', 'activityLog'];
-    
-    fields.forEach(field => {
-      if (req.body[field] !== undefined) {
-        if (field === 'components' || field === 'activityLog') {
-          updates[field] = JSON.stringify(req.body[field]);
-        } else {
-          updates[field] = req.body[field];
-        }
-      }
-    });
-
-    console.log('Updates:', Object.keys(updates));
-
-    // UPDATE query'sini dinamik oluştur
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    const setClauses = Object.keys(updates).map(key => `${key} = ?`).join(', ');
-    const values = [...Object.values(updates), req.params.id];
-
-    console.log('SQL:', `UPDATE engines SET ${setClauses} WHERE id = ?`);
-
+    const { model, serialNumber, status, totalHours, totalCycles, nextServiceDue, manufacturer, location, components, activityLog } = req.body;
     await dbRun(
-      `UPDATE engines SET ${setClauses} WHERE id = ?`,
-      values
+      'UPDATE engines SET model = ?, serialNumber = ?, status = ?, totalHours = ?, totalCycles = ?, nextServiceDue = ?, manufacturer = ?, location = ?, components = ?, activityLog = ? WHERE id = ?',
+      [model, serialNumber, status, totalHours, totalCycles, nextServiceDue, manufacturer, location, JSON.stringify(components), JSON.stringify(activityLog), req.params.id]
     );
-
-    // Güncellenmiş engine'i döndür
-    const updatedEngine = await dbGet('SELECT * FROM engines WHERE id = ?', [req.params.id]);
-    console.log('Update successful!');
-    res.json(parseEngine(updatedEngine));
+    res.json({ id: req.params.id, ...req.body });
   } catch (err) {
-    console.error('=== ENGINE UPDATE ERROR ===');
-    console.error('Error:', err.message);
-    console.error('Stack:', err.stack);
     res.status(500).json({ error: err.message });
   }
 });
@@ -228,10 +186,10 @@ router.post('/tests', async (req, res) => {
 
 router.put('/tests/:id', async (req, res) => {
   try {
-    const { engineId, testType, brakeType, testCell, description, duration, testDate, documentId, userName } = req.body;
+    const { engineId, testType, testCell, description, duration, testDate, documentId, userName } = req.body;
     await dbRun(
-      'UPDATE tests SET engineId = ?, testType = ?, brakeType = ?, testCell = ?, description = ?, duration = ?, testDate = ?, documentId = ?, userName = ? WHERE id = ?',
-      [engineId, testType, brakeType, testCell, description, duration, testDate, documentId, userName, req.params.id]
+      'UPDATE tests SET engineId = ?, testType = ?, testCell = ?, description = ?, duration = ?, testDate = ?, documentId = ?, userName = ? WHERE id = ?',
+      [engineId, testType, testCell, description, duration, testDate, documentId, userName, req.params.id]
     );
     res.json({ id: req.params.id, ...req.body });
   } catch (err) {
@@ -478,68 +436,6 @@ router.delete('/documents/:id', async (req, res) => {
   try {
     await dbRun('DELETE FROM documents WHERE id = ?', [req.params.id]);
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// =============== ENGINE ACTIVITY LOG ===============
-// Get activity log for a specific engine (combining tests, faults, swaps)
-router.get('/engines/:id/activities', async (req, res) => {
-  try {
-    const engineId = parseInt(req.params.id);
-    
-    // Get tests
-    const tests = await dbAll('SELECT * FROM tests WHERE engineId = ? ORDER BY testDate DESC', [engineId]);
-    
-    // Get faults
-    const faults = await dbAll('SELECT * FROM faults WHERE engineId = ? ORDER BY reportDate DESC', [engineId]);
-    
-    // Get swaps
-    const swaps = await dbAll('SELECT * FROM swaps WHERE engineId = ? ORDER BY swapDate DESC', [engineId]);
-    
-    // Combine and format activities
-    const activities = [];
-    
-    // Add tests
-    tests.forEach(test => {
-      activities.push({
-        type: 'Test',
-        details: `${test.testType} (${test.testCell})`,
-        date: test.testDate,
-        duration: test.duration,
-        id: test.id,
-        fullData: test
-      });
-    });
-    
-    // Add faults
-    faults.forEach(fault => {
-      activities.push({
-        type: 'Fault',
-        details: fault.description,
-        date: fault.reportDate,
-        severity: fault.severity,
-        id: fault.id,
-        fullData: fault
-      });
-    });
-    
-    // Add swaps
-    swaps.forEach(swap => {
-      activities.push({
-        type: 'Swap',
-        details: `Component Swap (ID: ${swap.componentInstalledId} → ${swap.componentRemovedId})`,
-        date: swap.swapDate,
-        id: swap.id,
-        fullData: swap
-      });
-    });
-    
-    // Sort by date (newest first)
-    activities.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    res.json(activities);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

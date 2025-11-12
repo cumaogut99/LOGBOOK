@@ -1,17 +1,13 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useRefetch } from '../hooks/useData';
 import { enginesApi } from '../lib/client.ts';
-import type { Engine, Component as BomComponent, ActivityLogItem, BuildReportHistory } from '../types';
+import type { Engine, Component as BomComponent, ActivityLogItem } from '../types';
 import { PencilIcon, CirclePlusIcon, CircleMinusIcon } from '../constants';
 import { EngineModal } from '../components/EngineModal';
-import { ComponentModal } from '../components/ComponentModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { SearchFilter } from '../components/SearchFilter';
-import Modal from '../components/Modal';
 import { showSuccess, showError } from '../utils/toast';
 import { parseBuildReport, buildComponentTree, compareComponents } from '../utils/excelParser';
-import { exportBuildReportToExcel } from '../utils/exportUtils';
 
 const Engines: React.FC = () => {
     const [selectedEngineId, setSelectedEngineId] = useState<number | null>(null);
@@ -23,7 +19,7 @@ const Engines: React.FC = () => {
     const engines = useQuery(() => enginesApi.getAll(), [refreshKey]);
     const selectedEngine = engines?.find(e => e.id === selectedEngineId);
 
-    if (!engines) return <LoadingSpinner text="Motorlar yükleniyor..." />;
+    if (!engines) return <LoadingSpinner text="Loading engines..." />;
 
     const handleSelectEngine = (engine: Engine) => {
         setSelectedEngineId(engine.id ?? null);
@@ -49,15 +45,15 @@ const Engines: React.FC = () => {
         try {
             if (modalMode === 'add') {
                 await enginesApi.create(engineData as Omit<Engine, 'id'>);
-                showSuccess('Motor başarıyla eklendi!');
+                showSuccess('Engine added successfully!');
             } else {
                 await enginesApi.update(editingEngine!.id!, engineData);
-                showSuccess('Motor başarıyla güncellendi!');
+                showSuccess('Engine updated successfully!');
             }
             refetch();
             setIsModalOpen(false);
         } catch (error) {
-            showError(`Motor ${modalMode === 'add' ? 'eklenemedi' : 'güncellenemedi'}`);
+            showError(`Failed to ${modalMode === 'add' ? 'add' : 'update'} engine`);
             throw error;
         }
     };
@@ -89,8 +85,8 @@ const EngineFleetOverview: React.FC<{ engines: Engine[], onSelectEngine: (engine
         <div>
             <div className="flex justify-end mb-6">
                 <button onClick={onAddEngine} className="bg-brand-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md flex items-center transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 mr-2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    Motor Ekle
+                    <svg xmlns="http://www.w.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 mr-2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Add Engine
                 </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -101,22 +97,22 @@ const EngineFleetOverview: React.FC<{ engines: Engine[], onSelectEngine: (engine
                                 <p className="text-lg font-bold text-white">{engine.model}</p>
                                 <p className="text-sm text-brand-light">{engine.serialNumber}</p>
                             </div>
-                            <span className={`text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1.5 ${engine.status === 'Active' ? 'bg-green-500/20 text-green-400' : engine.status === 'AOG' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                <span className={`h-2 w-2 rounded-full ${engine.status === 'Active' ? 'bg-green-400' : engine.status === 'AOG' ? 'bg-red-400' : 'bg-yellow-400'}`}></span>
-                                {engine.status === 'Active' ? 'Aktif' : engine.status === 'AOG' ? 'AOG' : 'Bakım Gerekli'}
+                            <span className={`text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1.5 ${engine.status === 'Active' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                <span className={`h-2 w-2 rounded-full ${engine.status === 'Active' ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+                                {engine.status}
                             </span>
                         </div>
                         <div className="my-6 text-center">
-                            <p className="text-sm text-brand-light">TOPLAM SÜRE (TTH)</p>
+                            <p className="text-sm text-brand-light">TOTAL TIME (TTH)</p>
                             <p className="text-5xl font-bold text-white">{engine.totalHours.toFixed(1)}</p>
-                            <p className="text-sm text-brand-light">saat</p>
+                            <p className="text-sm text-brand-light">hours</p>
                         </div>
                         <div className="text-center mb-6">
-                            <p className="text-sm text-brand-light">SONRAKİ BAKIM</p>
-                            <p className="text-xl font-bold text-white">{typeof engine.nextServiceDue === 'number' ? `${engine.nextServiceDue}s` : engine.nextServiceDue}</p>
+                            <p className="text-sm text-brand-light">NEXT SERVICE DUE</p>
+                            <p className="text-xl font-bold text-white">{typeof engine.nextServiceDue === 'number' ? `${engine.nextServiceDue}h` : engine.nextServiceDue}</p>
                         </div>
                         <button onClick={() => onSelectEngine(engine)} className="mt-auto w-full bg-brand-border hover:bg-slate-600 text-white font-bold py-2 px-4 rounded-md">
-                            Detayları Görüntüle
+                            View Details
                         </button>
                     </div>
                 ))}
@@ -130,84 +126,12 @@ const EngineDetails: React.FC<{
     onBack: () => void,
     onEdit: (engine: Engine) => void 
 }> = ({ engine, onBack, onEdit }) => {
-    const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set([1, 100]));
+    const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set([1, 100])); // Pre-expand some rows for demo
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
     const [selectedBRFile, setSelectedBRFile] = useState<File | null>(null);
     const [isUploadingBR, setIsUploadingBR] = useState(false);
-    const [isBRHistoryOpen, setIsBRHistoryOpen] = useState(false);
-    const [editingComponent, setEditingComponent] = useState<BomComponent | null>(null);
-    const [isComponentModalOpen, setIsComponentModalOpen] = useState(false);
-    const [componentSearchQuery, setComponentSearchQuery] = useState('');
-    const [activitySearchQuery, setActivitySearchQuery] = useState('');
     const brFileInputRef = useRef<HTMLInputElement>(null);
-    const { refreshKey, refetch } = useRefetch();
-
-    // Load activities dynamically from backend
-    const activities = useQuery(
-        () => engine.id ? enginesApi.getActivities(engine.id) : Promise.resolve([]),
-        [engine.id, refreshKey]
-    );
-
-    // Mock BR history - gerçek uygulamada bu backend'den gelecek
-    const [brHistory] = useState<BuildReportHistory[]>([
-        {
-            id: 1,
-            engineId: engine.id || 0,
-            uploadDate: '2025-10-26T10:30:00',
-            uploadedBy: 'Admin User',
-            fileName: 'BR_PD170_2025-10-26.xlsx',
-            components: engine.components,
-            changesSummary: { added: 5, updated: 2, removed: 1 }
-        }
-    ]);
-
-    // Filter components based on search
-    const filteredComponents = useMemo(() => {
-        if (!componentSearchQuery.trim()) return engine.components;
-        
-        const query = componentSearchQuery.toLowerCase();
-        
-        const filterComponentTree = (components: BomComponent[]): BomComponent[] => {
-            return components.filter(comp => {
-                const matchesCurrent = 
-                    comp.description.toLowerCase().includes(query) ||
-                    comp.partNumber.toLowerCase().includes(query) ||
-                    comp.serialNumber.toLowerCase().includes(query);
-                
-                if (matchesCurrent) return true;
-                
-                // Check children
-                if (comp.children && comp.children.length > 0) {
-                    return filterComponentTree(comp.children).length > 0;
-                }
-                
-                return false;
-            }).map(comp => {
-                if (comp.children && comp.children.length > 0) {
-                    return {
-                        ...comp,
-                        children: filterComponentTree(comp.children)
-                    };
-                }
-                return comp;
-            });
-        };
-        
-        return filterComponentTree(engine.components);
-    }, [engine.components, componentSearchQuery]);
-
-    // Filter activities based on search
-    const filteredActivities = useMemo(() => {
-        if (!activities) return [];
-        if (!activitySearchQuery.trim()) return activities;
-        
-        const query = activitySearchQuery.toLowerCase();
-        return activities.filter(activity => 
-            activity.details.toLowerCase().includes(query) ||
-            activity.type.toLowerCase().includes(query) ||
-            activity.date.toLowerCase().includes(query)
-        );
-    }, [activities, activitySearchQuery]);
+    const { refetch } = useRefetch();
 
     const toggleRow = (id: number) => {
         setExpandedRows(prev => {
@@ -227,10 +151,10 @@ const EngineDetails: React.FC<{
         setIsUpdatingStatus(true);
         try {
             await enginesApi.update(engine.id, { status: newStatus as Engine['status'] });
-            showSuccess(`Motor durumu ${newStatus === 'Active' ? 'Aktif' : newStatus === 'AOG' ? 'AOG' : 'Bakım Gerekli'} olarak güncellendi`);
+            showSuccess(`Engine status updated to ${newStatus}`);
             refetch();
         } catch (error) {
-            showError('Motor durumu güncellenemedi');
+            showError('Failed to update engine status');
             console.error(error);
         } finally {
             setIsUpdatingStatus(false);
@@ -240,6 +164,7 @@ const EngineDetails: React.FC<{
     const handleBRFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            // Excel dosyası kontrolü
             const validExtensions = ['.xlsx', '.xls'];
             const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
             
@@ -257,14 +182,21 @@ const EngineDetails: React.FC<{
         
         setIsUploadingBR(true);
         try {
+            // 1. Excel'i parse et
             const rows = await parseBuildReport(selectedBRFile);
+            
+            // 2. Component tree oluştur
             const newComponents = buildComponentTree(rows);
+            
+            // 3. Mevcut components ile karşılaştır
             const diff = compareComponents(engine.components, newComponents);
             
+            // 4. Motor'u güncelle
             await enginesApi.update(engine.id, {
                 components: newComponents
             });
             
+            // 5. Success message ile detayları göster
             const messages = [];
             if (diff.added.length > 0) messages.push(`${diff.added.length} parça eklendi`);
             if (diff.updated.length > 0) messages.push(`${diff.updated.length} parça güncellendi`);
@@ -274,6 +206,7 @@ const EngineDetails: React.FC<{
                 `Build Report başarıyla yüklendi! ${messages.length > 0 ? messages.join(', ') : 'Tüm parçalar aynı'}`
             );
             
+            // 6. Dosya seçimini temizle ve refetch
             setSelectedBRFile(null);
             if (brFileInputRef.current) brFileInputRef.current.value = '';
             refetch();
@@ -284,51 +217,6 @@ const EngineDetails: React.FC<{
         } finally {
             setIsUploadingBR(false);
         }
-    };
-
-    const handleComponentEdit = (component: BomComponent) => {
-        setEditingComponent(component);
-        setIsComponentModalOpen(true);
-    };
-
-    const handleComponentSave = async (updatedComponent: Partial<BomComponent>) => {
-        if (!engine.id || !editingComponent) return;
-        
-        try {
-            // Update component in the tree
-            const updateComponentInTree = (components: BomComponent[]): BomComponent[] => {
-                return components.map(comp => {
-                    if (comp.id === editingComponent.id) {
-                        return { ...comp, ...updatedComponent };
-                    }
-                    if (comp.children && comp.children.length > 0) {
-                        return { ...comp, children: updateComponentInTree(comp.children) };
-                    }
-                    return comp;
-                });
-            };
-
-            const updatedComponents = updateComponentInTree(engine.components);
-            
-            await enginesApi.update(engine.id, { components: updatedComponents });
-            showSuccess('Komponent başarıyla güncellendi!');
-            refetch();
-            setIsComponentModalOpen(false);
-        } catch (error) {
-            showError('Komponent güncellenemedi');
-            console.error(error);
-        }
-    };
-
-    const handleExportCurrentBR = () => {
-        exportBuildReportToExcel(engine.components, engine.serialNumber);
-        showSuccess('Build Report Excel olarak indirildi!');
-    };
-
-    const handleExportHistoricalBR = (brHistory: BuildReportHistory) => {
-        const fileName = brHistory.fileName || `BR_${engine.serialNumber}_${brHistory.uploadDate.split('T')[0]}.xlsx`;
-        exportBuildReportToExcel(brHistory.components, engine.serialNumber, fileName);
-        showSuccess('Geçmiş Build Report Excel olarak indirildi!');
     };
     
     const renderBomRows = (components: BomComponent[], level = 0): React.ReactNode[] => {
@@ -355,12 +243,7 @@ const EngineDetails: React.FC<{
                     <td className="p-3">{comp.currentHours}</td>
                     <td className="p-3">{comp.lifeLimit}</td>
                     <td className="p-3">
-                        <button 
-                            onClick={() => handleComponentEdit(comp)}
-                            className="text-brand-light hover:text-white transition-colors"
-                        >
-                            <PencilIcon />
-                        </button>
+                        <button className="text-brand-light hover:text-white"><PencilIcon /></button>
                     </td>
                 </tr>
             );
@@ -378,25 +261,25 @@ const EngineDetails: React.FC<{
         switch(item.type) {
             case 'Swap':
                 borderColor = 'border-brand-primary';
-                title = 'Değişim';
+                title = 'Swap';
                 content = <p>{item.details}</p>;
                 break;
             case 'Fault':
                 borderColor = 'border-brand-accent';
-                title = 'Arıza';
+                title = 'Fault';
                 content = <div className="flex justify-between"><span>{item.details}</span><span className="font-bold text-yellow-400">{item.severity}</span></div>;
                 break;
             case 'Test':
                 borderColor = 'border-brand-secondary';
                 title = 'Test';
-                content = <div className="flex justify-between"><span>{item.details}</span><span className="font-semibold text-white">{item.duration} saat</span></div>;
+                content = <div className="flex justify-between"><span>{item.details}</span><span className="font-semibold text-white">{item.duration} hrs</span></div>;
                 break;
         }
 
         return (
             <div key={index} className={`border-l-4 ${borderColor} pl-4 py-2`}>
-                <p className="font-bold text-white">{title}: {item.details.split('(')[0]}</p>
-                <p className="text-sm text-brand-light">{new Date(item.date).toLocaleString('tr-TR')}</p>
+                <p className="font-bold text-white">{title}: {item.details.split('/')[0]}</p>
+                <p className="text-sm text-brand-light">{item.date}</p>
                 <div className="text-sm mt-1">{content}</div>
             </div>
         )
@@ -406,34 +289,34 @@ const EngineDetails: React.FC<{
         <div className="space-y-6">
              <button onClick={onBack} className="text-brand-primary mb-0 flex items-center font-semibold hover:underline">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 mr-1"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                Motor Filosu Genel Bakış
+                Engine Fleet Overview
             </button>
             <div className="flex items-baseline space-x-2">
-                 <h2 className="text-2xl font-bold text-white">Motor Detayları / {engine.serialNumber}</h2>
+                 <h2 className="text-2xl font-bold text-white">Engine Details / {engine.serialNumber}</h2>
                  <p className="text-brand-light">Model: {engine.model}</p>
             </div>
            
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 grid grid-cols-3 gap-6">
                     <div className="bg-brand-card p-4 rounded-lg border border-brand-border text-center">
-                        <p className="text-sm text-brand-light">TOPLAM SÜRE</p>
+                        <p className="text-sm text-brand-light">TOTAL TIME</p>
                         <p className="text-4xl font-bold text-white">{engine.totalHours}</p>
-                        <p className="text-sm text-brand-light">saat</p>
+                        <p className="text-sm text-brand-light">hours</p>
                     </div>
                      <div className="bg-brand-card p-4 rounded-lg border border-brand-border text-center">
-                        <p className="text-sm text-brand-light">TOPLAM ÇEVRIM</p>
+                        <p className="text-sm text-brand-light">TOTAL CYCLES</p>
                         <p className="text-4xl font-bold text-white">{engine.totalCycles}</p>
-                        <p className="text-sm text-brand-light">çevrim</p>
+                        <p className="text-sm text-brand-light">cycles</p>
                     </div>
                      <div className="bg-brand-card p-4 rounded-lg border border-brand-border text-center">
-                        <p className="text-sm text-brand-light">SONRAKİ BAKIM</p>
+                        <p className="text-sm text-brand-light">NEXT SERVICE</p>
                         <p className="text-4xl font-bold text-white">{engine.nextServiceDue}</p>
-                        <p className="text-sm text-brand-light">kalan saat</p>
+                        <p className="text-sm text-brand-light">hours remaining</p>
                     </div>
                 </div>
                 <div className="bg-brand-card p-4 rounded-lg border border-brand-border space-y-3">
                     <div className="flex justify-between items-center">
-                       <h3 className="text-lg font-bold text-white">Motor Bilgileri</h3>
+                       <h3 className="text-lg font-bold text-white">Engine Information</h3>
                        <button 
                            onClick={() => onEdit(engine)}
                            className="text-brand-light hover:text-white transition-colors"
@@ -441,18 +324,18 @@ const EngineDetails: React.FC<{
                            <PencilIcon/>
                        </button>
                     </div>
-                    <div><span className="font-semibold">Seri Numarası:</span> {engine.serialNumber}</div>
-                    <div><span className="font-semibold">Üretici:</span> {engine.manufacturer}</div>
+                    <div><span className="font-semibold">Serial Number:</span> {engine.serialNumber}</div>
+                    <div><span className="font-semibold">Manufacturer:</span> {engine.manufacturer}</div>
                     <div className="flex items-center justify-between">
-                        <span className="font-semibold">Durum:</span>
+                        <span className="font-semibold">Status:</span>
                         <select 
                             value={engine.status} 
                             onChange={(e) => handleStatusChange(e.target.value)}
                             disabled={isUpdatingStatus}
                             className="bg-brand-dark border border-brand-border rounded-md p-1 text-white text-sm hover:bg-opacity-80 transition-colors disabled:opacity-50 cursor-pointer"
                         >
-                            <option value="Active">Aktif</option>
-                            <option value="Maintenance Due">Bakım Gerekli</option>
+                            <option value="Active">Active</option>
+                            <option value="Maintenance Due">Maintenance Due</option>
                             <option value="AOG">AOG</option>
                         </select>
                     </div>
@@ -461,31 +344,9 @@ const EngineDetails: React.FC<{
 
             {/* Build Report Import Section */}
             <div className="bg-brand-card p-6 rounded-lg border border-brand-border">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                        <span>📊</span> Build Report Yönetimi
-                    </h3>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => setIsBRHistoryOpen(true)}
-                            className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-md font-semibold transition-colors flex items-center gap-2"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            BR Geçmişi
-                        </button>
-                        <button
-                            onClick={handleExportCurrentBR}
-                            className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-md font-semibold transition-colors flex items-center gap-2"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Mevcut BR'yi İndir
-                        </button>
-                    </div>
-                </div>
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <span>📊</span> Build Report Import
+                </h3>
                 <div className="space-y-4">
                     <div className="bg-blue-500/10 border border-blue-500/30 rounded-md p-4">
                         <p className="text-sm text-blue-400 font-semibold mb-2">ℹ️ Build Report Excel Formatı:</p>
@@ -569,116 +430,32 @@ const EngineDetails: React.FC<{
             </div>
 
             <div className="bg-brand-card rounded-lg border border-brand-border">
-                <div className="p-4 border-b border-brand-border flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-white">Motor Ürün Ağacı</h3>
-                    <SearchFilter 
-                        searchTerm={componentSearchQuery}
-                        onSearchChange={setComponentSearchQuery}
-                        placeholder="Komponent ara (isim, parça no, seri no)..."
-                    />
-                </div>
+                <h3 className="text-lg font-bold text-white p-4 border-b border-brand-border">Engine Product Tree</h3>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
                         <thead className="border-b border-brand-border bg-brand-dark">
                             <tr>
-                                <th className="p-3 font-semibold">İSİM / AÇIKLAMA</th>
-                                <th className="p-3 font-semibold">PARÇA NUMARASI</th>
-                                <th className="p-3 font-semibold">SERİ NUMARASI</th>
-                                <th className="p-3 font-semibold">MEVCUT SAAT</th>
-                                <th className="p-3 font-semibold">ÖMÜR LİMİTİ</th>
-                                <th className="p-3 font-semibold">İŞLEMLER</th>
+                                <th className="p-3 font-semibold">NAME / DESCRIPTION</th>
+                                <th className="p-3 font-semibold">PART NUMBER</th>
+                                <th className="p-3 font-semibold">SERIAL NUMBER</th>
+                                <th className="p-3 font-semibold">CURRENT HOURS</th>
+                                <th className="p-3 font-semibold">LIFE LIMIT</th>
+                                <th className="p-3 font-semibold">ACTIONS</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredComponents.length > 0 ? (
-                                renderBomRows(filteredComponents)
-                            ) : (
-                                <tr>
-                                    <td colSpan={6} className="p-8 text-center text-brand-light">
-                                        Arama kriterine uygun komponent bulunamadı
-                                    </td>
-                                </tr>
-                            )}
+                            {renderBomRows(engine.components)}
                         </tbody>
                     </table>
                 </div>
             </div>
 
              <div className="bg-brand-card rounded-lg border border-brand-border">
-                <div className="p-4 border-b border-brand-border flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-white">Son Aktivite Geçmişi</h3>
-                    <SearchFilter 
-                        searchTerm={activitySearchQuery}
-                        onSearchChange={setActivitySearchQuery}
-                        placeholder="Aktivite ara..."
-                    />
-                </div>
+                <h3 className="text-lg font-bold text-white p-4 border-b border-brand-border">Recent Activity Log</h3>
                 <div className="p-4 space-y-4">
-                    {!activities ? (
-                        <div className="text-center py-4">
-                            <LoadingSpinner text="Aktiviteler yükleniyor..." />
-                        </div>
-                    ) : filteredActivities.length > 0 ? (
-                        filteredActivities.map(renderActivityLogItem)
-                    ) : (
-                        <div className="text-center py-8 text-brand-light">
-                            {activitySearchQuery ? 'Arama kriterine uygun aktivite bulunamadı' : 'Henüz aktivite bulunmamaktadır'}
-                        </div>
-                    )}
+                    {engine.activityLog.map(renderActivityLogItem)}
                 </div>
             </div>
-
-            {/* BR History Modal */}
-            <Modal
-                isOpen={isBRHistoryOpen}
-                onClose={() => setIsBRHistoryOpen(false)}
-                title="Build Report Geçmişi"
-            >
-                <div className="space-y-4">
-                    {brHistory.length === 0 ? (
-                        <div className="text-center py-8 text-brand-light">
-                            <p>Henüz Build Report geçmişi bulunmamaktadır.</p>
-                        </div>
-                    ) : (
-                        brHistory.map((br) => (
-                            <div key={br.id} className="bg-brand-dark p-4 rounded-lg border border-brand-border">
-                                <div className="flex justify-between items-start mb-3">
-                                    <div>
-                                        <p className="font-semibold text-white">{br.fileName}</p>
-                                        <p className="text-sm text-brand-light">
-                                            {new Date(br.uploadDate).toLocaleString('tr-TR')} • {br.uploadedBy}
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={() => handleExportHistoricalBR(br)}
-                                        className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded-md text-sm font-semibold transition-colors flex items-center gap-2"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        İndir
-                                    </button>
-                                </div>
-                                {br.changesSummary && (
-                                    <div className="flex gap-4 text-sm">
-                                        <span className="text-green-400">✓ {br.changesSummary.added} eklendi</span>
-                                        <span className="text-blue-400">↻ {br.changesSummary.updated} güncellendi</span>
-                                        <span className="text-red-400">✗ {br.changesSummary.removed} kaldırıldı</span>
-                                    </div>
-                                )}
-                            </div>
-                        ))
-                    )}
-                </div>
-            </Modal>
-
-            {/* Component Edit Modal */}
-            <ComponentModal
-                isOpen={isComponentModalOpen}
-                onClose={() => setIsComponentModalOpen(false)}
-                onSave={handleComponentSave}
-                component={editingComponent}
-            />
         </div>
     );
 };

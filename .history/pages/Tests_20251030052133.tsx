@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useRefetch } from '../hooks/useData';
-import { testsApi, enginesApi } from '../lib/client.ts';
+import { testsApi, enginesApi, documentsApi } from '../lib/client.ts';
 import { testTypesApi, brakeTypesApi, documentsApi as newDocsApi } from '../lib/newApis.ts';
 import { useAuth } from '../hooks/useAuth';
 import type { Test, TestType, BrakeType } from '../types';
@@ -8,8 +8,7 @@ import { PencilIcon, TrashIcon, PaperclipIcon, PlusIcon } from '../constants';
 import Modal from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { showSuccess, showError, showWarning } from '../utils/toast';
-import { updateComponentHours, checkLifeLimits, generateLifeLimitMessage } from '../utils/componentUtils';
+import { showSuccess, showError } from '../utils/toast';
 
 const Tests: React.FC = () => {
     const { user } = useAuth();
@@ -53,17 +52,14 @@ const Tests: React.FC = () => {
         }
         
         try {
-            const duration = parseFloat(newTest.duration);
-            const engineId = parseInt(newTest.engineId);
-            
             // Create test
             const createdTest = await testsApi.create({
-                engineId: engineId,
+                engineId: parseInt(newTest.engineId),
                 testType: newTest.testType,
                 brakeType: newTest.brakeType || undefined,
                 testCell: newTest.testCell,
                 description: newTest.description,
-                duration: duration,
+                duration: parseFloat(newTest.duration),
                 testDate: new Date().toISOString(),
                 userName: user.fullName,
             });
@@ -79,38 +75,16 @@ const Tests: React.FC = () => {
                 }
             }
             
-            // Update engine hours and components
-            const engine = engines?.find(e => e.id === engineId);
+            // Update engine total hours
+            const engine = engines?.find(e => e.id === parseInt(newTest.engineId));
             if (engine) {
-                // 1. Update total hours
-                const newTotalHours = (engine.totalHours || 0) + duration;
-                
-                // 2. Update total cycles (+1)
-                const newTotalCycles = (engine.totalCycles || 0) + 1;
-                
-                // 3. Update all component hours
-                const updatedComponents = updateComponentHours(engine.components, duration);
-                
-                // 4. Check life limits
-                const exceedingParts = checkLifeLimits(updatedComponents);
-                
-                // 5. Update engine
-                await enginesApi.update(engine.id!, {
-                    totalHours: newTotalHours,
-                    totalCycles: newTotalCycles,
-                    components: updatedComponents
-                });
-                
-                // 6. Show warnings if any parts exceed life limit
-                if (exceedingParts.length > 0) {
-                    const warningMessage = generateLifeLimitMessage(exceedingParts);
-                    showWarning(`⚠️ ${warningMessage}`);
-                }
+                const newTotalHours = (engine.totalHours || 0) + parseFloat(newTest.duration);
+                await enginesApi.update(engine.id!, { totalHours: newTotalHours });
             }
             
             setNewTest({ engineId: '', testType: '', brakeType: '', testCell: 'Cell-01 High Alt', description: '', duration: '' });
             setUploadedFiles([]);
-            showSuccess(`Test logged successfully! Motor: ${duration}h eklendi, tüm parça saatleri güncellendi.`);
+            showSuccess('Test logged successfully and engine hours updated!');
             refetch();
         } catch (error) {
             showError('Failed to log test');
@@ -369,17 +343,6 @@ const Tests: React.FC = () => {
                                             {uploadedFiles.length} file(s) selected
                                         </p>
                                     )}
-                                </div>
-                                
-                                {/* Auto-update information */}
-                                <div className="bg-blue-500/10 border border-blue-500/30 rounded-md p-3 text-sm">
-                                    <p className="font-semibold text-blue-400 mb-2">ℹ️ Otomatik Güncellemeler:</p>
-                                    <ul className="list-disc list-inside text-brand-light ml-2 space-y-1">
-                                        <li>Motor toplam saati güncellenecek</li>
-                                        <li>Motor cycle sayısı +1 artırılacak</li>
-                                        <li>Motor üzerindeki <strong>tüm parça saatleri</strong> güncellenecek</li>
-                                        <li>Life limit aşan veya yaklaşan parçalar için uyarı verilecek</li>
-                                    </ul>
                                 </div>
                                 
                                 <button type="submit" className="bg-brand-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md">
