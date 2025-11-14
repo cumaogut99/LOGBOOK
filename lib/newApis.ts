@@ -76,6 +76,16 @@ export const maintenancePlansApi = {
   approve: async (id: number, approvedBy: string): Promise<MaintenancePlan> => {
     const response = await axios.patch(`${API_BASE_URL}/maintenance-plans/${id}/approve`, { approvedBy });
     return response.data;
+  },
+  
+  checkPeriodic: async (engineId: number): Promise<any> => {
+    const response = await axios.get(`${API_BASE_URL}/maintenance-plans/check-periodic/${engineId}`);
+    return response.data;
+  },
+  
+  updateNextService: async (engineId: number): Promise<any> => {
+    const response = await axios.post(`${API_BASE_URL}/maintenance-plans/update-next-service/${engineId}`);
+    return response.data;
   }
 };
 

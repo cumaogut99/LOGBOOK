@@ -4,6 +4,7 @@ const path = require('path');
 const apiRoutes = require('./routes/api');
 const testTypesRoutes = require('./routes/testTypes');
 const brakeTypesRoutes = require('./routes/brakeTypes');
+const operatorsRoutes = require('./routes/operators');
 const maintenancePlansRoutes = require('./routes/maintenancePlans');
 
 const app = express();
@@ -18,6 +19,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api', apiRoutes);
 app.use('/api/test-types', testTypesRoutes);
 app.use('/api/brake-types', brakeTypesRoutes);
+app.use('/api/operators', operatorsRoutes);
 app.use('/api/maintenance-plans', maintenancePlansRoutes);
 
 // Serve static files from React app in production

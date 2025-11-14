@@ -43,12 +43,13 @@ const Tests: React.FC = () => {
     const [newTestType, setNewTestType] = useState({ name: '', description: '' });
     const [newBrakeType, setNewBrakeType] = useState({ name: '', description: '' });
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
 
     // Test logging with document upload
     const handleLogSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user || !newTest.engineId || !newTest.duration || !newTest.testType) {
-            showError('Please fill all required fields');
+            showError('Lütfen tüm gerekli alanları doldurun');
             return;
         }
         
@@ -110,10 +111,10 @@ const Tests: React.FC = () => {
             
             setNewTest({ engineId: '', testType: '', brakeType: '', testCell: 'Cell-01 High Alt', description: '', duration: '' });
             setUploadedFiles([]);
-            showSuccess(`Test logged successfully! Motor: ${duration}h eklendi, tüm parça saatleri güncellendi.`);
+            showSuccess(`Test başarıyla kaydedildi! Motor: ${duration}h eklendi, tüm parça saatleri güncellendi.`);
             refetch();
         } catch (error) {
-            showError('Failed to log test');
+            showError('Test kaydedilemedi');
             console.error(error);
         }
     };
@@ -163,20 +164,20 @@ const Tests: React.FC = () => {
             });
             setNewBrakeType({ name: '', description: '' });
             setBrakeTypeModalOpen(false);
-            showSuccess('Brake type created successfully!');
+            showSuccess('Bremze tipi başarıyla oluşturuldu!');
             refetch();
         } catch (error) {
-            showError('Failed to create brake type');
+            showError('Bremze tipi oluşturulamadı');
         }
     };
     
     const handleDeleteBrakeType = async (id: number) => {
         try {
             await brakeTypesApi.delete(id);
-            showSuccess('Brake type deleted successfully!');
+            showSuccess('Bremze tipi başarıyla silindi!');
             refetch();
         } catch (error) {
-            showError('Failed to delete brake type');
+            showError('Bremze tipi silinemedi');
         }
     };
     
@@ -195,7 +196,7 @@ const Tests: React.FC = () => {
             try {
                 if (deleteConfirm.type === 'test') {
                     await testsApi.delete(deleteConfirm.id);
-                    showSuccess('Test deleted successfully!');
+                    showSuccess('Test başarıyla silindi!');
                 } else if (deleteConfirm.type === 'testType') {
                     await handleDeleteTestType(deleteConfirm.id);
                 } else if (deleteConfirm.type === 'brakeType') {
@@ -203,7 +204,7 @@ const Tests: React.FC = () => {
                 }
                 refetch();
             } catch (error) {
-                showError(`Failed to delete ${deleteConfirm.type}`);
+                showError(`Silme işlemi başarısız oldu`);
             }
         }
         setDeleteConfirm({ isOpen: false, id: null, type: 'test' });
@@ -253,14 +254,32 @@ const Tests: React.FC = () => {
         }
     };
 
-    if (!tests || !engines || !testTypes || !brakeTypes) return <LoadingSpinner text="Loading tests..." />;
+    if (!tests || !engines || !testTypes || !brakeTypes) return <LoadingSpinner text="Testler yükleniyor..." />;
+
+    // Filter tests based on search term
+    const filteredTests = tests?.filter(test => {
+        if (!searchTerm) return true;
+        
+        const searchLower = searchTerm.toLowerCase();
+        const engine = engines?.find(e => e.id === test.engineId);
+        
+        return (
+            engine?.serialNumber.toLowerCase().includes(searchLower) ||
+            test.testType.toLowerCase().includes(searchLower) ||
+            test.brakeType?.toLowerCase().includes(searchLower) ||
+            test.userName.toLowerCase().includes(searchLower) ||
+            test.description.toLowerCase().includes(searchLower) ||
+            test.testCell.toLowerCase().includes(searchLower) ||
+            new Date(test.testDate).toLocaleDateString('tr-TR').includes(searchLower)
+        );
+    });
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-3xl font-bold">Test Management</h1>
-                    <p className="text-brand-light">Define and log standardized test activities.</p>
+                    <h1 className="text-3xl font-bold">Test Yönetimi</h1>
+                    <p className="text-brand-light">Standartlaştırılmış test faaliyetlerini tanımlayın ve kaydedin.</p>
                 </div>
             </div>
 
@@ -270,7 +289,7 @@ const Tests: React.FC = () => {
                     onClick={() => setActiveTab('tests')}
                     className={`px-4 py-2 font-semibold ${activeTab === 'tests' ? 'border-b-2 border-brand-primary text-brand-primary' : 'text-brand-light'}`}
                 >
-                    Test Activities
+                    Test Faaliyetleri
                 </button>
                 {isTestEngineer && (
                     <>
@@ -278,13 +297,13 @@ const Tests: React.FC = () => {
                             onClick={() => setActiveTab('testTypes')}
                             className={`px-4 py-2 font-semibold ${activeTab === 'testTypes' ? 'border-b-2 border-brand-primary text-brand-primary' : 'text-brand-light'}`}
                         >
-                            Test Types
+                            Test Tipleri
                         </button>
                         <button
                             onClick={() => setActiveTab('brakeTypes')}
                             className={`px-4 py-2 font-semibold ${activeTab === 'brakeTypes' ? 'border-b-2 border-brand-primary text-brand-primary' : 'text-brand-light'}`}
                         >
-                            Brake Types
+                            Bremze Tipleri
                         </button>
                     </>
                 )}
@@ -295,7 +314,7 @@ const Tests: React.FC = () => {
                 <>
                     {canLog && (
                         <div className="bg-brand-card p-6 rounded-lg border border-brand-border">
-                            <h2 className="text-lg font-bold text-white mb-4">Log New Test Activity</h2>
+                            <h2 className="text-lg font-bold text-white mb-4">Yeni Test Faaliyeti Kaydet</h2>
                             <form onSubmit={handleLogSubmit} className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <select 
@@ -304,7 +323,7 @@ const Tests: React.FC = () => {
                                         className="bg-brand-dark border border-brand-border rounded-md p-2 text-white" 
                                         required
                                     >
-                                        <option value="">-- Select Engine --</option>
+                                        <option value="">-- Motor Seçin --</option>
                                         {engines?.map(e => <option key={e.id} value={e.id}>{e.serialNumber}</option>)}
                                     </select>
                                     
@@ -314,7 +333,7 @@ const Tests: React.FC = () => {
                                         className="bg-brand-dark border border-brand-border rounded-md p-2 text-white" 
                                         required
                                     >
-                                        <option value="">-- Select Test Type --</option>
+                                        <option value="">-- Test Tipi Seçin --</option>
                                         {testTypes?.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                                     </select>
                                     
@@ -323,7 +342,7 @@ const Tests: React.FC = () => {
                                         onChange={e => setNewTest({...newTest, brakeType: e.target.value})} 
                                         className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                                     >
-                                        <option value="">-- Select Brake Type (Optional) --</option>
+                                        <option value="">-- Bremze Tipi Seçin (Opsiyonel) --</option>
                                         {brakeTypes?.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
                                     </select>
                                 </div>
@@ -331,7 +350,7 @@ const Tests: React.FC = () => {
                                 <input 
                                     value={newTest.testCell} 
                                     onChange={e => setNewTest({...newTest, testCell: e.target.value})} 
-                                    placeholder="Test Cell" 
+                                    placeholder="Test Hücresi" 
                                     className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white" 
                                     required 
                                 />
@@ -339,7 +358,7 @@ const Tests: React.FC = () => {
                                 <textarea 
                                     value={newTest.description} 
                                     onChange={e => setNewTest({...newTest, description: e.target.value})} 
-                                    placeholder="Test Description" 
+                                    placeholder="Test Açıklaması" 
                                     className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white" 
                                     rows={3}
                                 />
@@ -349,14 +368,14 @@ const Tests: React.FC = () => {
                                     step="0.1" 
                                     value={newTest.duration} 
                                     onChange={e => setNewTest({...newTest, duration: e.target.value})} 
-                                    placeholder="Duration (Hours)" 
+                                    placeholder="Süre (Saat)" 
                                     className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white" 
                                     required 
                                 />
                                 
                                 <div>
                                     <label className="block text-sm font-medium text-brand-light mb-2">
-                                        Attach Documents (Optional)
+                                        Döküman Ekle (Opsiyonel)
                                     </label>
                                     <input 
                                         type="file" 
@@ -366,7 +385,7 @@ const Tests: React.FC = () => {
                                     />
                                     {uploadedFiles.length > 0 && (
                                         <p className="text-sm text-brand-light mt-1">
-                                            {uploadedFiles.length} file(s) selected
+                                            {uploadedFiles.length} dosya seçildi
                                         </p>
                                     )}
                                 </div>
@@ -383,67 +402,101 @@ const Tests: React.FC = () => {
                                 </div>
                                 
                                 <button type="submit" className="bg-brand-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md">
-                                    Log Activity
+                                    Faaliyet Kaydet
                                 </button>
                             </form>
                         </div>
                     )}
                     
                     <div className="bg-brand-card rounded-lg border border-brand-border">
-                        <h2 className="text-lg font-bold text-white p-4 border-b border-brand-border">Recent Test Activities</h2>
+                        <div className="p-4 border-b border-brand-border">
+                            <div className="flex justify-between items-center">
+                                <h2 className="text-lg font-bold text-white">Son Test Faaliyetleri</h2>
+                                <div className="relative w-80">
+                                    <input
+                                        type="text"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        placeholder="Motor, test tipi, yapan kişi, açıklama ile ara..."
+                                        className="w-full bg-brand-dark border border-brand-border rounded-md py-2 px-4 text-white placeholder-gray-400 focus:outline-none focus:border-brand-primary"
+                                    />
+                                    {searchTerm && (
+                                        <button
+                                            onClick={() => setSearchTerm('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            {searchTerm && (
+                                <p className="text-sm text-brand-light mt-2">
+                                    {filteredTests?.length || 0} sonuç bulundu
+                                </p>
+                            )}
+                        </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
                                 <thead className="border-b border-brand-border bg-brand-dark">
                                     <tr>
-                                        <th className="p-3 font-semibold">DATE</th>
-                                        <th className="p-3 font-semibold">ENGINE</th>
-                                        <th className="p-3 font-semibold">TEST TYPE</th>
-                                        <th className="p-3 font-semibold">BRAKE TYPE</th>
-                                        <th className="p-3 font-semibold">DESCRIPTION</th>
-                                        <th className="p-3 font-semibold">DURATION</th>
-                                        <th className="p-3 font-semibold">LOGGED BY</th>
-                                        <th className="p-3 font-semibold">DOCUMENT</th>
-                                        {canModify && <th className="p-3 font-semibold">ACTIONS</th>}
+                                        <th className="p-3 font-semibold">TARİH</th>
+                                        <th className="p-3 font-semibold">MOTOR</th>
+                                        <th className="p-3 font-semibold">TEST TİPİ</th>
+                                        <th className="p-3 font-semibold">BREMZE TİPİ</th>
+                                        <th className="p-3 font-semibold">TESTİ YAPAN</th>
+                                        <th className="p-3 font-semibold">AÇIKLAMA</th>
+                                        <th className="p-3 font-semibold">SÜRE</th>
+                                        <th className="p-3 font-semibold">DÖKÜMAN</th>
+                                        {canModify && <th className="p-3 font-semibold">İŞLEMLER</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {tests?.map(test => (
-                                        <tr key={test.id} className="border-b border-brand-border hover:bg-brand-dark">
-                                            <td className="p-3">{new Date(test.testDate).toLocaleDateString()}</td>
-                                            <td className="p-3">{engines?.find(e => e.id === test.engineId)?.serialNumber}</td>
-                                            <td className="p-3">{test.testType}</td>
-                                            <td className="p-3">{test.brakeType || '-'}</td>
-                                            <td className="p-3">{test.description}</td>
-                                            <td className="p-3">{test.duration.toFixed(1)} hrs</td>
-                                            <td className="p-3 text-brand-light">{test.userName}</td>
-                                            <td className="p-3">
-                                                {test.documentId && (
-                                                    <button 
-                                                        onClick={() => handleDownload(test.documentId!)} 
-                                                        className="text-brand-primary hover:text-blue-400"
-                                                    >
-                                                        <PaperclipIcon />
-                                                    </button>
-                                                )}
-                                            </td>
-                                            {canModify && (
-                                                <td className="p-3 flex space-x-4">
-                                                    <button 
-                                                        onClick={() => handleEdit(test)} 
-                                                        className="text-brand-light hover:text-white"
-                                                    >
-                                                        <PencilIcon />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleDelete(test.id!, 'test')} 
-                                                        className="text-brand-danger hover:text-red-400"
-                                                    >
-                                                        <TrashIcon />
-                                                    </button>
+                                    {filteredTests && filteredTests.length > 0 ? (
+                                        filteredTests.map(test => (
+                                            <tr key={test.id} className="border-b border-brand-border hover:bg-brand-dark">
+                                                <td className="p-3">{new Date(test.testDate).toLocaleDateString('tr-TR')}</td>
+                                                <td className="p-3">{engines?.find(e => e.id === test.engineId)?.serialNumber}</td>
+                                                <td className="p-3">{test.testType}</td>
+                                                <td className="p-3">{test.brakeType || '-'}</td>
+                                                <td className="p-3 font-semibold text-brand-primary">{test.userName}</td>
+                                                <td className="p-3">{test.description}</td>
+                                                <td className="p-3">{test.duration.toFixed(1)} saat</td>
+                                                <td className="p-3">
+                                                    {test.documentId && (
+                                                        <button 
+                                                            onClick={() => handleDownload(test.documentId!)} 
+                                                            className="text-brand-primary hover:text-blue-400"
+                                                        >
+                                                            <PaperclipIcon />
+                                                        </button>
+                                                    )}
                                                 </td>
-                                            )}
+                                                {canModify && (
+                                                    <td className="p-3 flex space-x-4">
+                                                        <button 
+                                                            onClick={() => handleEdit(test)} 
+                                                            className="text-brand-light hover:text-white"
+                                                        >
+                                                            <PencilIcon />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDelete(test.id!, 'test')} 
+                                                            className="text-brand-danger hover:text-red-400"
+                                                        >
+                                                            <TrashIcon />
+                                                        </button>
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={canModify ? 9 : 8} className="p-8 text-center text-brand-light">
+                                                {searchTerm ? 'Arama kriterlerine uygun test bulunamadı' : 'Henüz test kaydı bulunmuyor'}
+                                            </td>
                                         </tr>
-                                    ))}
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -460,21 +513,21 @@ const Tests: React.FC = () => {
                             className="bg-brand-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md flex items-center space-x-2"
                         >
                             <PlusIcon />
-                            <span>Add Test Type</span>
+                            <span>Test Tipi Ekle</span>
                         </button>
                     </div>
                     
                     <div className="bg-brand-card rounded-lg border border-brand-border">
-                        <h2 className="text-lg font-bold text-white p-4 border-b border-brand-border">Test Types</h2>
+                        <h2 className="text-lg font-bold text-white p-4 border-b border-brand-border">Test Tipleri</h2>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
                                 <thead className="border-b border-brand-border bg-brand-dark">
                                     <tr>
-                                        <th className="p-3 font-semibold">NAME</th>
-                                        <th className="p-3 font-semibold">DESCRIPTION</th>
-                                        <th className="p-3 font-semibold">CREATED BY</th>
-                                        <th className="p-3 font-semibold">CREATED AT</th>
-                                        <th className="p-3 font-semibold">ACTIONS</th>
+                                        <th className="p-3 font-semibold">İSİM</th>
+                                        <th className="p-3 font-semibold">AÇIKLAMA</th>
+                                        <th className="p-3 font-semibold">OLUŞTURAN</th>
+                                        <th className="p-3 font-semibold">OLUŞTURMA TARİHİ</th>
+                                        <th className="p-3 font-semibold">İŞLEMLER</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -483,7 +536,7 @@ const Tests: React.FC = () => {
                                             <td className="p-3 font-semibold">{type.name}</td>
                                             <td className="p-3">{type.description || '-'}</td>
                                             <td className="p-3 text-brand-light">{type.createdBy}</td>
-                                            <td className="p-3">{new Date(type.createdAt).toLocaleDateString()}</td>
+                                            <td className="p-3">{new Date(type.createdAt).toLocaleDateString('tr-TR')}</td>
                                             <td className="p-3">
                                                 {type.name !== 'Other' && (
                                                     <button 
@@ -512,21 +565,21 @@ const Tests: React.FC = () => {
                             className="bg-brand-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md flex items-center space-x-2"
                         >
                             <PlusIcon />
-                            <span>Add Brake Type</span>
+                            <span>Bremze Tipi Ekle</span>
                         </button>
                     </div>
                     
                     <div className="bg-brand-card rounded-lg border border-brand-border">
-                        <h2 className="text-lg font-bold text-white p-4 border-b border-brand-border">Brake Types</h2>
+                        <h2 className="text-lg font-bold text-white p-4 border-b border-brand-border">Bremze Tipleri</h2>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
                                 <thead className="border-b border-brand-border bg-brand-dark">
                                     <tr>
-                                        <th className="p-3 font-semibold">NAME</th>
-                                        <th className="p-3 font-semibold">DESCRIPTION</th>
-                                        <th className="p-3 font-semibold">CREATED BY</th>
-                                        <th className="p-3 font-semibold">CREATED AT</th>
-                                        <th className="p-3 font-semibold">ACTIONS</th>
+                                        <th className="p-3 font-semibold">İSİM</th>
+                                        <th className="p-3 font-semibold">AÇIKLAMA</th>
+                                        <th className="p-3 font-semibold">OLUŞTURAN</th>
+                                        <th className="p-3 font-semibold">OLUŞTURMA TARİHİ</th>
+                                        <th className="p-3 font-semibold">İŞLEMLER</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -535,7 +588,7 @@ const Tests: React.FC = () => {
                                             <td className="p-3 font-semibold">{type.name}</td>
                                             <td className="p-3">{type.description || '-'}</td>
                                             <td className="p-3 text-brand-light">{type.createdBy}</td>
-                                            <td className="p-3">{new Date(type.createdAt).toLocaleDateString()}</td>
+                                            <td className="p-3">{new Date(type.createdAt).toLocaleDateString('tr-TR')}</td>
                                             <td className="p-3">
                                                 {type.name !== 'Other' && (
                                                     <button 
@@ -580,48 +633,48 @@ const Tests: React.FC = () => {
             )}
             
             {isTestTypeModalOpen && (
-                <Modal isOpen={isTestTypeModalOpen} onClose={() => setTestTypeModalOpen(false)} title="Add Test Type">
+                <Modal isOpen={isTestTypeModalOpen} onClose={() => setTestTypeModalOpen(false)} title="Test Tipi Ekle">
                     <form onSubmit={handleCreateTestType} className="space-y-4">
                         <input 
                             value={newTestType.name} 
                             onChange={(e) => setNewTestType({...newTestType, name: e.target.value})}
-                            placeholder="Test Type Name"
+                            placeholder="Test Tipi İsmi"
                             className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                             required
                         />
                         <textarea 
                             value={newTestType.description} 
                             onChange={(e) => setNewTestType({...newTestType, description: e.target.value})}
-                            placeholder="Description (Optional)"
+                            placeholder="Açıklama (Opsiyonel)"
                             className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                             rows={3}
                         />
                         <button type="submit" className="bg-brand-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md">
-                            Create Test Type
+                            Test Tipi Oluştur
                         </button>
                     </form>
                 </Modal>
             )}
             
             {isBrakeTypeModalOpen && (
-                <Modal isOpen={isBrakeTypeModalOpen} onClose={() => setBrakeTypeModalOpen(false)} title="Add Brake Type">
+                <Modal isOpen={isBrakeTypeModalOpen} onClose={() => setBrakeTypeModalOpen(false)} title="Bremze Tipi Ekle">
                     <form onSubmit={handleCreateBrakeType} className="space-y-4">
                         <input 
                             value={newBrakeType.name} 
                             onChange={(e) => setNewBrakeType({...newBrakeType, name: e.target.value})}
-                            placeholder="Brake Type Name"
+                            placeholder="Bremze Tipi İsmi"
                             className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                             required
                         />
                         <textarea 
                             value={newBrakeType.description} 
                             onChange={(e) => setNewBrakeType({...newBrakeType, description: e.target.value})}
-                            placeholder="Description (Optional)"
+                            placeholder="Açıklama (Opsiyonel)"
                             className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                             rows={3}
                         />
                         <button type="submit" className="bg-brand-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md">
-                            Create Brake Type
+                            Bremze Tipi Oluştur
                         </button>
                     </form>
                 </Modal>
@@ -629,10 +682,10 @@ const Tests: React.FC = () => {
             
             <ConfirmDialog
                 isOpen={deleteConfirm.isOpen}
-                title={`Delete ${deleteConfirm.type === 'test' ? 'Test' : deleteConfirm.type === 'testType' ? 'Test Type' : 'Brake Type'}`}
-                message={`Are you sure you want to delete this ${deleteConfirm.type}? This action cannot be undone.`}
-                confirmText="Delete"
-                cancelText="Cancel"
+                title={`${deleteConfirm.type === 'test' ? 'Test' : deleteConfirm.type === 'testType' ? 'Test Tipi' : 'Bremze Tipi'} Sil`}
+                message={`Bu ${deleteConfirm.type === 'test' ? 'testi' : deleteConfirm.type === 'testType' ? 'test tipini' : 'bremze tipini'} silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
+                confirmText="Sil"
+                cancelText="İptal"
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteConfirm({ isOpen: false, id: null, type: 'test' })}
                 variant="danger"

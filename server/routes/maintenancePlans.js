@@ -44,11 +44,16 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   const { 
     engineId, 
-    planType, 
+    planType,
+    maintenanceType,
     description, 
     scheduledDate, 
     dueHours, 
-    dueCycles, 
+    dueCycles,
+    periodicIntervalHours,
+    periodicIntervalCycles,
+    lastPerformedHours,
+    nextDueHours,
     status, 
     createdBy, 
     createdAt 
@@ -56,9 +61,11 @@ router.post('/', (req, res) => {
   
   db.run(
     `INSERT INTO maintenance_plans 
-    (engineId, planType, description, scheduledDate, dueHours, dueCycles, status, createdBy, createdAt) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [engineId, planType, description, scheduledDate, dueHours, dueCycles, status, createdBy, createdAt],
+    (engineId, planType, maintenanceType, description, scheduledDate, dueHours, dueCycles, 
+     periodicIntervalHours, periodicIntervalCycles, lastPerformedHours, nextDueHours, status, createdBy, createdAt) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [engineId, planType, maintenanceType || 'one-time', description, scheduledDate, dueHours, dueCycles,
+     periodicIntervalHours, periodicIntervalCycles, lastPerformedHours, nextDueHours, status, createdBy, createdAt],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -67,11 +74,16 @@ router.post('/', (req, res) => {
       res.status(201).json({ 
         id: this.lastID, 
         engineId, 
-        planType, 
+        planType,
+        maintenanceType,
         description, 
         scheduledDate, 
         dueHours, 
-        dueCycles, 
+        dueCycles,
+        periodicIntervalHours,
+        periodicIntervalCycles,
+        lastPerformedHours,
+        nextDueHours,
         status, 
         createdBy, 
         createdAt 
@@ -83,11 +95,16 @@ router.post('/', (req, res) => {
 // Update maintenance plan
 router.put('/:id', (req, res) => {
   const { 
-    planType, 
+    planType,
+    maintenanceType,
     description, 
     scheduledDate, 
     dueHours, 
-    dueCycles, 
+    dueCycles,
+    periodicIntervalHours,
+    periodicIntervalCycles,
+    lastPerformedHours,
+    nextDueHours,
     status, 
     approvedBy, 
     approvedAt 
@@ -95,10 +112,13 @@ router.put('/:id', (req, res) => {
   
   db.run(
     `UPDATE maintenance_plans 
-    SET planType = ?, description = ?, scheduledDate = ?, dueHours = ?, dueCycles = ?, 
+    SET planType = ?, maintenanceType = ?, description = ?, scheduledDate = ?, dueHours = ?, dueCycles = ?,
+        periodicIntervalHours = ?, periodicIntervalCycles = ?, lastPerformedHours = ?, nextDueHours = ?,
         status = ?, approvedBy = ?, approvedAt = ? 
     WHERE id = ?`,
-    [planType, description, scheduledDate, dueHours, dueCycles, status, approvedBy, approvedAt, req.params.id],
+    [planType, maintenanceType, description, scheduledDate, dueHours, dueCycles,
+     periodicIntervalHours, periodicIntervalCycles, lastPerformedHours, nextDueHours,
+     status, approvedBy, approvedAt, req.params.id],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -110,11 +130,16 @@ router.put('/:id', (req, res) => {
       }
       res.json({ 
         id: req.params.id, 
-        planType, 
+        planType,
+        maintenanceType,
         description, 
         scheduledDate, 
         dueHours, 
-        dueCycles, 
+        dueCycles,
+        periodicIntervalHours,
+        periodicIntervalCycles,
+        lastPerformedHours,
+        nextDueHours,
         status, 
         approvedBy, 
         approvedAt 
@@ -166,6 +191,131 @@ router.delete('/:id', (req, res) => {
     }
     res.json({ message: 'Maintenance plan deleted successfully' });
   });
+});
+
+// Check periodic maintenance and generate alerts
+router.get('/check-periodic/:engineId', (req, res) => {
+  const { engineId } = req.params;
+  
+  // Get engine
+  db.get('SELECT * FROM engines WHERE id = ?', [engineId], (err, engine) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    if (!engine) {
+      res.status(404).json({ error: 'Engine not found' });
+      return;
+    }
+    
+    // Get active periodic maintenance plans
+    db.all(
+      `SELECT * FROM maintenance_plans 
+       WHERE engineId = ? AND maintenanceType = 'periodic' AND status = 'Active'`,
+      [engineId],
+      (err, plans) => {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        
+        const alerts = [];
+        plans.forEach(plan => {
+          if (plan.periodicIntervalHours && engine.totalHours) {
+            const hoursSinceLastMaintenance = engine.totalHours - (plan.lastPerformedHours || 0);
+            const hoursUntilNext = plan.periodicIntervalHours - hoursSinceLastMaintenance;
+            
+            if (hoursUntilNext <= 0) {
+              alerts.push({
+                ...plan,
+                alertType: 'overdue',
+                message: `Bakım süresi doldu! ${Math.abs(hoursUntilNext).toFixed(1)} saat gecikme`,
+                hoursOverdue: Math.abs(hoursUntilNext)
+              });
+            } else if (hoursUntilNext <= 10) {
+              alerts.push({
+                ...plan,
+                alertType: 'warning',
+                message: `${hoursUntilNext.toFixed(1)} saat sonra bakım gerekli`,
+                hoursRemaining: hoursUntilNext
+              });
+            }
+          }
+        });
+        
+        res.json({
+          engine,
+          periodicPlans: plans,
+          alerts
+        });
+      }
+    );
+  });
+});
+
+// Update next service due for engine based on maintenance plans
+router.post('/update-next-service/:engineId', (req, res) => {
+  const { engineId } = req.params;
+  
+  // Get all active periodic plans
+  db.all(
+    `SELECT * FROM maintenance_plans 
+     WHERE engineId = ? AND maintenanceType = 'periodic' AND status = 'Active'
+     ORDER BY periodicIntervalHours ASC`,
+    [engineId],
+    (err, plans) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      
+      if (plans.length === 0) {
+        res.json({ message: 'No periodic plans found' });
+        return;
+      }
+      
+      // Get engine current hours
+      db.get('SELECT totalHours FROM engines WHERE id = ?', [engineId], (err, engine) => {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        
+        // Find closest maintenance
+        let nextServiceHours = null;
+        plans.forEach(plan => {
+          if (plan.periodicIntervalHours) {
+            const hoursSinceLast = engine.totalHours - (plan.lastPerformedHours || 0);
+            const hoursUntilNext = plan.periodicIntervalHours - hoursSinceLast;
+            
+            if (nextServiceHours === null || hoursUntilNext < nextServiceHours) {
+              nextServiceHours = hoursUntilNext;
+            }
+          }
+        });
+        
+        if (nextServiceHours !== null) {
+          // Update engine nextServiceDue
+          db.run(
+            'UPDATE engines SET nextServiceDue = ? WHERE id = ?',
+            [nextServiceHours.toFixed(1), engineId],
+            (err) => {
+              if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+              }
+              res.json({ 
+                nextServiceDue: nextServiceHours.toFixed(1),
+                message: 'Next service due updated successfully'
+              });
+            }
+          );
+        } else {
+          res.json({ message: 'Could not calculate next service due' });
+        }
+      });
+    }
+  );
 });
 
 module.exports = router;

@@ -90,8 +90,7 @@ export interface Fault {
     description: string;
     severity: Severity;
     reportDate: string;
-    status: 'Open' | 'Solved';
-    assignedTo?: string;
+    status: 'Open' | 'Closed';
     documentId?: number;
     documents?: Document[];
     userName: string;
@@ -100,17 +99,14 @@ export interface Fault {
 export interface SwapActivity {
     id?: number;
     engineId: number;
-    componentInstalledId: number | null;
-    componentRemovedId: number | null;
+    componentInstalledId: number;
+    componentRemovedId: number;
     swapDate: string;
-    swapType: 'Component' | 'Assembly' | 'BR Update';
+    swapType: 'Component' | 'Assembly';
     assemblyGroup?: string;
     documentId?: number;
     documents?: Document[];
     userName: string;
-    // For BR-based swaps, we store serial numbers
-    installedSerialNumber?: string;
-    removedSerialNumber?: string;
 }
 
 export interface InventoryItem {

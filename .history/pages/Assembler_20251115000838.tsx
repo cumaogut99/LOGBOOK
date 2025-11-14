@@ -151,47 +151,9 @@ const Assembler: React.FC = () => {
                 components: updatedComponents
             });
             
-            // Remove installed component from inventory
-            await inventoryApi.delete(installedId);
-            
-            // Add removed component back to inventory (if it exists)
-            const removedInventoryItem = inventory?.find(i => i.id === removedId);
-            if (removedInventoryItem) {
-                // Component was from inventory, add it back with updated hours
-                await inventoryApi.update(removedId, {
-                    ...removedInventoryItem,
-                    // Keep the same data, it's back in inventory
-                });
-            } else {
-                // Component was from engine, find it in the old component tree
-                const findComponentById = (components: Component[], id: number): Component | undefined => {
-                    for (const comp of components) {
-                        if (comp.id === id) return comp;
-                        if (comp.children) {
-                            const found = findComponentById(comp.children, id);
-                            if (found) return found;
-                        }
-                    }
-                    return undefined;
-                };
-                
-                const removedComponent = findComponentById(engine.components, removedId);
-                if (removedComponent) {
-                    // Add removed component to inventory
-                    await inventoryApi.create({
-                        partNumber: removedComponent.partNumber,
-                        serialNumber: removedComponent.serialNumber,
-                        description: removedComponent.description,
-                        quantity: 1,
-                        location: 'Depo',
-                        userName: user.fullName
-                    });
-                }
-            }
-            
             setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '' });
             setUploadedFiles([]);
-            showSuccess(`${swapState.swapType === 'Assembly' ? 'Montaj grubu' : 'Parça'} değişimi tamamlandı! Motor bileşenleri ve depo güncellendi.`);
+            showSuccess(`${swapState.swapType === 'Assembly' ? 'Montaj grubu' : 'Parça'} değişimi tamamlandı! Motor bileşenleri güncellendi.`);
             refetch();
         } catch (error) {
             showError(error instanceof Error ? error.message : 'Değişim işlemi başarısız');
