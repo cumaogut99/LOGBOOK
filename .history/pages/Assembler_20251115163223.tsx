@@ -93,8 +93,7 @@ const Assembler: React.FC = () => {
         removeId: '',
         installId: '',
         swapType: 'Component' as 'Component' | 'Assembly',
-        assemblyGroup: '', // Group to remove
-        assemblyGroupToInstall: '' // Group to install (for Assembly mode)
+        assemblyGroup: ''
     });
 
     // Get available assembly groups for selected engine
@@ -105,42 +104,22 @@ const Assembler: React.FC = () => {
         return extractAssemblyGroups(selectedEngine.components);
     }, [swapState.engineId, engines]);
 
-    // Get available assembly groups from inventory (for installation)
-    const availableInventoryGroups = React.useMemo(() => {
-        if (!inventory) return [];
-        // Extract unique groups from inventory descriptions
-        const groups = new Set<string>();
-        inventory.forEach(item => {
-            // Assume inventory items have description that can represent assembly groups
-            if (item.description) {
-                groups.add(item.description);
-            }
-        });
-        return Array.from(groups).sort();
-    }, [inventory]);
-
     const handleSwap = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !swapState.engineId) {
-            showError('Lütfen bir motor seçin');
+        if (!user || !swapState.engineId || !swapState.installId || !swapState.removeId) {
+            showError('Lütfen tüm gerekli alanları doldurun');
             return;
         }
         
-        // Validation based on swap type
-        if (swapState.swapType === 'Assembly') {
-            if (!swapState.assemblyGroup || !swapState.assemblyGroupToInstall) {
-                showError('Lütfen çıkarılacak ve takılacak alt montaj gruplarını seçin');
-                return;
-            }
-        } else {
-            if (!swapState.installId || !swapState.removeId) {
-                showError('Lütfen çıkarılacak ve takılacak parçaları seçin');
-                return;
-            }
+        if (swapState.swapType === 'Assembly' && !swapState.assemblyGroup) {
+            showError('Lütfen bir montaj grubu seçin');
+            return;
         }
         
         try {
             const engineId = parseInt(swapState.engineId);
+            const installedId = parseInt(swapState.installId);
+            const removedId = parseInt(swapState.removeId);
             
             // Get engine
             const engine = engines?.find(e => e.id === engineId);
@@ -148,126 +127,88 @@ const Assembler: React.FC = () => {
                 throw new Error('Motor bulunamadı');
             }
             
-            if (swapState.swapType === 'Assembly') {
-                // ASSEMBLY MODE: Replace entire assembly group
-                // For now, we'll create a swap record indicating the assembly group change
-                // The actual component tree update will be done via BR upload
-                
-                const createdSwap = await swapsApi.create({
-                    engineId: engineId,
-                    componentInstalledId: null, // No specific component, entire assembly
-                    componentRemovedId: null,   // No specific component, entire assembly
-                    swapDate: new Date().toISOString(),
-                    swapType: 'Assembly',
-                    assemblyGroup: swapState.assemblyGroup,
-                    userName: user.fullName,
-                    installedSerialNumber: undefined,
-                    removedSerialNumber: undefined
-                });
-                
-                // Upload documents if any
-                if (uploadedFiles.length > 0 && createdSwap.id) {
-                    for (const file of uploadedFiles) {
-                        await newDocsApi.upload(file, {
-                            relatedType: 'swap',
-                            relatedId: createdSwap.id,
-                            uploadedBy: user.fullName
-                        });
-                    }
-                }
-                
-                setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '', assemblyGroupToInstall: '' });
-                setUploadedFiles([]);
-                showSuccess(`Alt montaj grubu "${swapState.assemblyGroup}" değişimi kaydedildi! Yeni yapılandırma için BR yükleyin.`);
-                refetch();
-                
-            } else {
-                // COMPONENT MODE: Replace individual component
-                const installedId = parseInt(swapState.installId);
-                const removedId = parseInt(swapState.removeId);
-                
-                // Get component from inventory
-                const inventoryItem = inventory?.find(i => i.id === installedId);
-                if (!inventoryItem) {
-                    throw new Error('Parça depoda bulunamadı');
-                }
-                
-                // Create swap activity
-                const createdSwap = await swapsApi.create({
-                    engineId: engineId,
-                    componentInstalledId: installedId,
-                    componentRemovedId: removedId,
-                    swapDate: new Date().toISOString(),
-                    swapType: 'Component',
-                    assemblyGroup: undefined,
-                    userName: user.fullName
-                });
-                
-                // Upload documents if any
-                if (uploadedFiles.length > 0 && createdSwap.id) {
-                    for (const file of uploadedFiles) {
-                        await newDocsApi.upload(file, {
-                            relatedType: 'swap',
-                            relatedId: createdSwap.id,
-                            uploadedBy: user.fullName
-                        });
-                    }
-                }
-                
-                // Update engine components
-                const newComponent = inventoryToComponent(inventoryItem, engine.totalHours);
-                const updatedComponents = replaceComponentInTree(
-                    engine.components,
-                    removedId,
-                    newComponent
-                );
-                
-                await enginesApi.update(engineId, {
-                    components: updatedComponents
-                });
-                
-                // Remove installed component from inventory
-                await inventoryApi.delete(installedId);
-                
-                // Add removed component back to inventory (if it exists)
-                const removedInventoryItem = inventory?.find(i => i.id === removedId);
-                if (removedInventoryItem) {
-                    // Component was from inventory, add it back with updated hours
-                    await inventoryApi.update(removedId, {
-                        ...removedInventoryItem,
-                        // Keep the same data, it's back in inventory
-                    });
-                } else {
-                    // Component was from engine, find it in the old component tree
-                    const findComponentById = (components: Component[], id: number): Component | undefined => {
-                        for (const comp of components) {
-                            if (comp.id === id) return comp;
-                            if (comp.children) {
-                                const found = findComponentById(comp.children, id);
-                                if (found) return found;
-                            }
-                        }
-                        return undefined;
-                    };
-                    
-                    const removedComponent = findComponentById(engine.components, removedId);
-                    if (removedComponent) {
-                        // Add removed component to inventory
-                        await inventoryApi.create({
-                            partNumber: removedComponent.partNumber,
-                            serialNumber: removedComponent.serialNumber,
-                            description: removedComponent.description,
-                            location: 'Depo',
-                            userName: user.fullName
-                        });
-                    }
-                }
-                
-                setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '', assemblyGroupToInstall: '' });
-                setUploadedFiles([]);
-                showSuccess('Parça değişimi tamamlandı! Motor bileşenleri ve depo güncellendi.');
-                refetch();
+            // Get component from inventory
+            const inventoryItem = inventory?.find(i => i.id === installedId);
+            if (!inventoryItem) {
+                throw new Error('Parça depoda bulunamadı');
             }
+            
+            // Create swap activity
+            const createdSwap = await swapsApi.create({
+                engineId: engineId,
+                componentInstalledId: installedId,
+                componentRemovedId: removedId,
+                swapDate: new Date().toISOString(),
+                swapType: swapState.swapType,
+                assemblyGroup: swapState.swapType === 'Assembly' ? swapState.assemblyGroup : undefined,
+                userName: user.fullName
+            });
+            
+            // Upload documents if any
+            if (uploadedFiles.length > 0 && createdSwap.id) {
+                for (const file of uploadedFiles) {
+                    await newDocsApi.upload(file, {
+                        relatedType: 'swap',
+                        relatedId: createdSwap.id,
+                        uploadedBy: user.fullName
+                    });
+                }
+            }
+            
+            // Update engine components
+            const newComponent = inventoryToComponent(inventoryItem, engine.totalHours);
+            const updatedComponents = replaceComponentInTree(
+                engine.components,
+                removedId,
+                newComponent
+            );
+            
+            await enginesApi.update(engineId, {
+                components: updatedComponents
+            });
+            
+            // Remove installed component from inventory
+            await inventoryApi.delete(installedId);
+            
+            // Add removed component back to inventory (if it exists)
+            const removedInventoryItem = inventory?.find(i => i.id === removedId);
+            if (removedInventoryItem) {
+                // Component was from inventory, add it back with updated hours
+                await inventoryApi.update(removedId, {
+                    ...removedInventoryItem,
+                    // Keep the same data, it's back in inventory
+                });
+            } else {
+                // Component was from engine, find it in the old component tree
+                const findComponentById = (components: Component[], id: number): Component | undefined => {
+                    for (const comp of components) {
+                        if (comp.id === id) return comp;
+                        if (comp.children) {
+                            const found = findComponentById(comp.children, id);
+                            if (found) return found;
+                        }
+                    }
+                    return undefined;
+                };
+                
+                const removedComponent = findComponentById(engine.components, removedId);
+                if (removedComponent) {
+                    // Add removed component to inventory
+                    await inventoryApi.create({
+                        partNumber: removedComponent.partNumber,
+                        serialNumber: removedComponent.serialNumber,
+                        description: removedComponent.description,
+                        quantity: 1,
+                        location: 'Depo',
+                        userName: user.fullName
+                    });
+                }
+            }
+            
+            setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '' });
+            setUploadedFiles([]);
+            showSuccess(`${swapState.swapType === 'Assembly' ? 'Alt montaj grubu' : 'Parça'} değişimi tamamlandı! Motor bileşenleri ve depo güncellendi.`);
+            refetch();
         } catch (error) {
             showError(error instanceof Error ? error.message : 'Değişim işlemi başarısız');
             console.error(error);
@@ -348,7 +289,7 @@ const Assembler: React.FC = () => {
                                         type="radio"
                                         value="Component"
                                         checked={swapState.swapType === 'Component'}
-                                        onChange={(e) => setSwapState({...swapState, swapType: e.target.value as 'Component', assemblyGroup: '', assemblyGroupToInstall: ''})}
+                                        onChange={(e) => setSwapState({...swapState, swapType: e.target.value as 'Component', assemblyGroup: ''})}
                                         className="form-radio text-brand-primary"
                                     />
                                     <span className="text-white">Tekil Parça</span>
@@ -369,7 +310,7 @@ const Assembler: React.FC = () => {
                         {/* Engine Selection */}
                         <select
                             value={swapState.engineId}
-                            onChange={(e) => setSwapState({...swapState, engineId: e.target.value, assemblyGroup: '', assemblyGroupToInstall: ''})}
+                            onChange={(e) => setSwapState({...swapState, engineId: e.target.value, assemblyGroup: ''})}
                             className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                             required
                         >
@@ -377,108 +318,69 @@ const Assembler: React.FC = () => {
                             {engines?.map(e => <option key={e.id} value={e.id}>{e.serialNumber}</option>)}
                         </select>
                         
-                        {/* Different flow for Assembly vs Component */}
-                        {swapState.swapType === 'Assembly' ? (
-                            // Assembly mode: Select which assembly group to swap
-                            swapState.engineId && (
-                                <>
-                                    <div>
-                                        <label className="block text-sm font-medium text-brand-light mb-2">
-                                            2. ÇIKARILACAK Alt Montaj Grubunu Seçin (Motordan)
-                                        </label>
-                                        <select
-                                            value={swapState.assemblyGroup}
-                                            onChange={(e) => setSwapState({...swapState, assemblyGroup: e.target.value})}
-                                            className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                            required
-                                        >
-                                            <option value="">-- Motordan çıkarılacak grubu seçin --</option>
-                                            {availableAssemblyGroups.length > 0 ? (
-                                                availableAssemblyGroups.map(group => (
-                                                    <option key={group} value={group}>{group}</option>
-                                                ))
-                                            ) : (
-                                                <option value="" disabled>Motor üzerinde alt montaj grubu bulunamadı</option>
-                                            )}
-                                        </select>
-                                        {availableAssemblyGroups.length === 0 && (
-                                            <p className="text-sm text-yellow-400 mt-1">
-                                                ⚠️ Seçilen motorda alt montaj grubu tanımlı değil
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-brand-light mb-2">
-                                            3. TAKILACAK Alt Montaj Grubunu Seçin (Depodan)
-                                        </label>
-                                        <select
-                                            value={swapState.assemblyGroupToInstall}
-                                            onChange={(e) => setSwapState({...swapState, assemblyGroupToInstall: e.target.value})}
-                                            className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                            required
-                                        >
-                                            <option value="">-- Depodan takılacak grubu seçin --</option>
-                                            {availableInventoryGroups.length > 0 ? (
-                                                availableInventoryGroups.map(group => (
-                                                    <option key={group} value={group}>{group}</option>
-                                                ))
-                                            ) : (
-                                                <option value="" disabled>Depoda alt montaj grubu bulunamadı</option>
-                                            )}
-                                        </select>
-                                        {availableInventoryGroups.length === 0 && (
-                                            <p className="text-sm text-yellow-400 mt-1">
-                                                ⚠️ Depoda alt montaj grubu tanımlı değil
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    {/* Info box for assembly swap */}
-                                    {swapState.assemblyGroup && swapState.assemblyGroupToInstall && (
-                                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-md p-3 text-sm">
-                                            <p className="font-semibold text-blue-400 mb-2">📦 Alt Montaj Grubu Değişimi:</p>
-                                            <ul className="list-disc list-inside text-brand-light ml-2 space-y-1">
-                                                <li>Motordan <strong className="text-red-400">"{swapState.assemblyGroup}"</strong> grubu çıkarılacak (tüm parçalar)</li>
-                                                <li>Depodan <strong className="text-green-400">"{swapState.assemblyGroupToInstall}"</strong> grubu takılacak (tüm parçalar)</li>
-                                                <li>Bu işlem toplu montaj değişimidir</li>
-                                            </ul>
-                                        </div>
+                        {/* Assembly Group Selection (only for Assembly type and after engine selected) */}
+                        {swapState.swapType === 'Assembly' && swapState.engineId && (
+                            <div>
+                                <select
+                                    value={swapState.assemblyGroup}
+                                    onChange={(e) => setSwapState({...swapState, assemblyGroup: e.target.value})}
+                                    className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
+                                    required
+                                >
+                                    <option value="">-- Alt Montaj Grubu Seçin --</option>
+                                    {availableAssemblyGroups.length > 0 ? (
+                                        availableAssemblyGroups.map(group => (
+                                            <option key={group} value={group}>{group}</option>
+                                        ))
+                                    ) : (
+                                        <option value="" disabled>Motor üzerinde alt montaj grubu bulunamadı</option>
                                     )}
-                                </>
-                            )
-                        ) : (
-                            // Component mode: Select individual parts
-                            <>
-                                <select
-                                    value={swapState.removeId}
-                                    onChange={(e) => setSwapState({...swapState, removeId: e.target.value})}
-                                    className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                    required
-                                >
-                                    <option value="">2. ÇIKARILACAK Parça Seçin</option>
-                                    {inventory?.map(i => (
-                                        <option key={i.id} value={i.id}>
-                                            {`${i.description} (SN: ${i.serialNumber})`}
-                                        </option>
-                                    ))}
                                 </select>
-                                
-                                <select
-                                    value={swapState.installId}
-                                    onChange={(e) => setSwapState({...swapState, installId: e.target.value})}
-                                    className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                    required
-                                >
-                                    <option value="">3. TAKILACAK Parça Seçin (Depodan)</option>
-                                    {inventory?.map(i => (
-                                        <option key={i.id} value={i.id}>
-                                            {`${i.description} (SN: ${i.serialNumber})`}
-                                        </option>
-                                    ))}
-                                </select>
-                            </>
+                                {availableAssemblyGroups.length === 0 && (
+                                    <p className="text-sm text-yellow-400 mt-1">
+                                        ⚠️ Seçilen motorda alt montaj grubu tanımlı değil
+                                    </p>
+                                )}
+                            </div>
                         )}
+                        
+                        <select
+                            value={swapState.removeId}
+                            onChange={(e) => setSwapState({...swapState, removeId: e.target.value})}
+                            className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
+                            required
+                        >
+                            <option value="">
+                                {swapState.swapType === 'Assembly' 
+                                    ? '2. ÇIKARILACAK Parça Seçin (Bu alt montaj grubundan)'
+                                    : '2. ÇIKARILACAK Parça Seçin'
+                                }
+                            </option>
+                            {inventory?.map(i => (
+                                <option key={i.id} value={i.id}>
+                                    {`${i.description} (SN: ${i.serialNumber})`}
+                                </option>
+                            ))}
+                        </select>
+                        
+                        <select
+                            value={swapState.installId}
+                            onChange={(e) => setSwapState({...swapState, installId: e.target.value})}
+                            className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
+                            required
+                        >
+                            <option value="">
+                                {swapState.swapType === 'Assembly'
+                                    ? '3. TAKILACAK Parça Seçin (Depodan - Aynı alt montaj grubuna)'
+                                    : '3. TAKILACAK Parça Seçin (Depodan)'
+                                }
+                            </option>
+                            {inventory?.map(i => (
+                                <option key={i.id} value={i.id}>
+                                    {`${i.description} (SN: ${i.serialNumber})`}
+                                </option>
+                            ))}
+                        </select>
                         
                         {/* Swap Information */}
                         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-md p-3 text-sm">

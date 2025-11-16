@@ -71,22 +71,6 @@ export interface MaintenancePlan {
     approvedAt?: string;
 }
 
-export interface ControlRequest {
-    id?: number;
-    engineId: number;
-    controlType: string;
-    description: string;
-    requestDate: string;
-    priority: 'Düşük' | 'Orta' | 'Yüksek' | 'Kritik';
-    status: 'Beklemede' | 'İşlemde' | 'Tamamlandı' | 'İptal';
-    createdBy: string;
-    createdAt: string;
-    completedBy?: string;
-    completedAt?: string;
-    documentId?: number;
-    documentName?: string;
-}
-
 export interface Test {
     id?: number;
     engineId: number;
@@ -141,8 +125,6 @@ export interface InventoryItem {
     userName: string;
     createdAt?: string;
     assemblyGroup?: string; // For grouping parts into assemblies
-    assemblyPartNumber?: string; // Part number of the assembly group
-    assemblySerialNumber?: string; // Serial number of the assembly group
 }
 
 export interface Component {

@@ -386,12 +386,7 @@ router.delete('/swaps/:id', async (req, res) => {
 router.get('/inventory', async (req, res) => {
   try {
     const inventory = await dbAll('SELECT * FROM inventory');
-    // Add createdAt to items that don't have it (legacy data)
-    const inventoryWithDates = inventory.map(item => ({
-      ...item,
-      createdAt: item.createdAt || new Date().toISOString()
-    }));
-    res.json(inventoryWithDates);
+    res.json(inventory);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -411,7 +406,7 @@ router.post('/inventory', async (req, res) => {
     console.log('=== INVENTORY CREATE REQUEST ===');
     console.log('Request Body:', JSON.stringify(req.body, null, 2));
     
-    const { partNumber, serialNumber, description, location, userName, assemblyGroup, assemblyPartNumber, assemblySerialNumber } = req.body;
+    const { partNumber, serialNumber, description, location, userName, assemblyGroup } = req.body;
     
     // Validate required fields
     if (!partNumber || !serialNumber || !description) {
@@ -424,8 +419,8 @@ router.post('/inventory', async (req, res) => {
     // quantity alanı DB'de NOT NULL olduğu için default 1 değerini gönderiyoruz
     // Her parçanın benzersiz seri numarası var, UI'da quantity gösterilmiyor
     const result = await dbRun(
-      'INSERT INTO inventory (partNumber, serialNumber, description, quantity, location, userName, createdAt, assemblyGroup, assemblyPartNumber, assemblySerialNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [partNumber, serialNumber, description, 1, location || 'Depo', userName, createdAt, assemblyGroup || null, assemblyPartNumber || null, assemblySerialNumber || null]
+      'INSERT INTO inventory (partNumber, serialNumber, description, quantity, location, userName, createdAt, assemblyGroup) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [partNumber, serialNumber, description, 1, location || 'Depo', userName, createdAt, assemblyGroup || null]
     );
     
     console.log('Inventory item created successfully with ID:', result.id);
@@ -438,9 +433,7 @@ router.post('/inventory', async (req, res) => {
       location: location || 'Depo', 
       userName,
       createdAt,
-      assemblyGroup: assemblyGroup || null,
-      assemblyPartNumber: assemblyPartNumber || null,
-      assemblySerialNumber: assemblySerialNumber || null
+      assemblyGroup: assemblyGroup || null
     });
   } catch (err) {
     console.error('=== INVENTORY CREATE ERROR ===');
@@ -452,24 +445,14 @@ router.post('/inventory', async (req, res) => {
 
 router.put('/inventory/:id', async (req, res) => {
   try {
-    const { partNumber, serialNumber, description, location, userName, assemblyGroup, assemblyPartNumber, assemblySerialNumber } = req.body;
-    
-    console.log('=== INVENTORY UPDATE REQUEST ===');
-    console.log('ID:', req.params.id);
-    console.log('Request Body:', JSON.stringify(req.body, null, 2));
-    
+    const { partNumber, serialNumber, description, location, userName } = req.body;
     // quantity alanını 1 olarak koruyoruz (DB şeması gereksinimleri)
     await dbRun(
-      'UPDATE inventory SET partNumber = ?, serialNumber = ?, description = ?, quantity = ?, location = ?, userName = ?, assemblyGroup = ?, assemblyPartNumber = ?, assemblySerialNumber = ? WHERE id = ?',
-      [partNumber, serialNumber, description, 1, location, userName, assemblyGroup || null, assemblyPartNumber || null, assemblySerialNumber || null, req.params.id]
+      'UPDATE inventory SET partNumber = ?, serialNumber = ?, description = ?, quantity = ?, location = ?, userName = ? WHERE id = ?',
+      [partNumber, serialNumber, description, 1, location, userName, req.params.id]
     );
-    
-    console.log('Inventory item updated successfully');
-    res.json({ id: req.params.id, ...req.body, quantity: 1 });
+    res.json({ id: req.params.id, ...req.body });
   } catch (err) {
-    console.error('=== INVENTORY UPDATE ERROR ===');
-    console.error('Error:', err.message);
-    console.error('Stack:', err.stack);
     res.status(500).json({ error: err.message });
   }
 });
@@ -613,101 +596,6 @@ router.get('/engines/:id/activities', async (req, res) => {
     activities.sort((a, b) => new Date(b.date) - new Date(a.date));
     
     res.json(activities);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// =============== CONTROL REQUESTS ===============
-router.get('/control-requests', async (req, res) => {
-  try {
-    const { engineId } = req.query;
-    let query = 'SELECT * FROM control_requests';
-    let params = [];
-    
-    if (engineId) {
-      query += ' WHERE engineId = ?';
-      params.push(engineId);
-    }
-    
-    query += ' ORDER BY createdAt DESC';
-    const requests = await dbAll(query, params);
-    res.json(requests);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/control-requests', async (req, res) => {
-  try {
-    const { engineId, controlType, description, requestDate, priority, status, createdBy, documentId, documentName } = req.body;
-    
-    const result = await dbRun(
-      'INSERT INTO control_requests (engineId, controlType, description, requestDate, priority, status, createdBy, createdAt, documentId, documentName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [engineId, controlType, description, requestDate, priority || 'Orta', status || 'Beklemede', createdBy, new Date().toISOString(), documentId || null, documentName || null]
-    );
-    
-    res.json({ id: result.id, ...req.body });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.put('/control-requests/:id', async (req, res) => {
-  try {
-    // Get current record first
-    const current = await dbGet('SELECT * FROM control_requests WHERE id = ?', [req.params.id]);
-    if (!current) {
-      return res.status(404).json({ error: 'Control request not found' });
-    }
-
-    // Merge with updates
-    const updated = {
-      controlType: req.body.controlType !== undefined ? req.body.controlType : current.controlType,
-      description: req.body.description !== undefined ? req.body.description : current.description,
-      requestDate: req.body.requestDate !== undefined ? req.body.requestDate : current.requestDate,
-      priority: req.body.priority !== undefined ? req.body.priority : current.priority,
-      status: req.body.status !== undefined ? req.body.status : current.status,
-      completedBy: req.body.completedBy !== undefined ? req.body.completedBy : current.completedBy,
-      completedAt: req.body.completedAt !== undefined ? req.body.completedAt : current.completedAt,
-      documentId: req.body.documentId !== undefined ? req.body.documentId : current.documentId,
-      documentName: req.body.documentName !== undefined ? req.body.documentName : current.documentName
-    };
-    
-    await dbRun(
-      'UPDATE control_requests SET controlType = ?, description = ?, requestDate = ?, priority = ?, status = ?, completedBy = ?, completedAt = ?, documentId = ?, documentName = ? WHERE id = ?',
-      [updated.controlType, updated.description, updated.requestDate, updated.priority, updated.status, updated.completedBy, updated.completedAt, updated.documentId, updated.documentName, req.params.id]
-    );
-    
-    const result = await dbGet('SELECT * FROM control_requests WHERE id = ?', [req.params.id]);
-    res.json(result);
-  } catch (err) {
-    console.error('Control request update error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.patch('/control-requests/:id/complete', async (req, res) => {
-  try {
-    const { completedBy } = req.body;
-    const completedAt = new Date().toISOString();
-    
-    await dbRun(
-      'UPDATE control_requests SET status = ?, completedBy = ?, completedAt = ? WHERE id = ?',
-      ['Tamamlandı', completedBy, completedAt, req.params.id]
-    );
-    
-    const request = await dbGet('SELECT * FROM control_requests WHERE id = ?', [req.params.id]);
-    res.json(request);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete('/control-requests/:id', async (req, res) => {
-  try {
-    await dbRun('DELETE FROM control_requests WHERE id = ?', [req.params.id]);
-    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

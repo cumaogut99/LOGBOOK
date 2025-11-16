@@ -257,6 +257,7 @@ const Assembler: React.FC = () => {
                             partNumber: removedComponent.partNumber,
                             serialNumber: removedComponent.serialNumber,
                             description: removedComponent.description,
+                            quantity: 1,
                             location: 'Depo',
                             userName: user.fullName
                         });
@@ -348,7 +349,7 @@ const Assembler: React.FC = () => {
                                         type="radio"
                                         value="Component"
                                         checked={swapState.swapType === 'Component'}
-                                        onChange={(e) => setSwapState({...swapState, swapType: e.target.value as 'Component', assemblyGroup: '', assemblyGroupToInstall: ''})}
+                                        onChange={(e) => setSwapState({...swapState, swapType: e.target.value as 'Component', assemblyGroup: ''})}
                                         className="form-radio text-brand-primary"
                                     />
                                     <span className="text-white">Tekil Parça</span>

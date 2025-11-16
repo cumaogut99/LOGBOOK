@@ -13,7 +13,6 @@ const QualityControl: React.FC = () => {
     const { user } = useAuth();
     const { refreshKey, refetch } = useRefetch();
     const maintenancePlans = useQuery(() => maintenancePlansApi.getAll(), [refreshKey]);
-    const controlRequests = useQuery(() => controlRequestsApi.getAll(), [refreshKey]);
     const engines = useQuery(() => enginesApi.getAll(), []);
 
     const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'all'>('pending');
@@ -31,13 +30,10 @@ const QualityControl: React.FC = () => {
     const [newPlan, setNewPlan] = useState({
         engineId: '',
         planType: 'Rutin İnceleme',
-        maintenanceType: 'one-time' as 'one-time' | 'periodic',
         description: '',
         scheduledDate: '',
         dueHours: '',
-        dueCycles: '',
-        periodicIntervalHours: '',
-        periodicIntervalCycles: ''
+        dueCycles: ''
     });
 
     // New control request form
@@ -92,23 +88,9 @@ const QualityControl: React.FC = () => {
     // Create new maintenance plan
     const handleCreatePlan = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !newPlan.engineId || !newPlan.description) {
+        if (!user || !newPlan.engineId || !newPlan.description || !newPlan.scheduledDate) {
             showError('Lütfen tüm gerekli alanları doldurun');
             return;
-        }
-
-        // Validation for one-time maintenance
-        if (newPlan.maintenanceType === 'one-time' && !newPlan.scheduledDate) {
-            showError('Tek seferlik bakım için planlı tarih gereklidir');
-            return;
-        }
-
-        // Validation for periodic maintenance
-        if (newPlan.maintenanceType === 'periodic') {
-            if (!newPlan.periodicIntervalHours && !newPlan.periodicIntervalCycles) {
-                showError('Periyodik bakım için en az bir periyodik aralık (saat veya çevrim) girmelisiniz');
-                return;
-            }
         }
         
         try {
@@ -127,13 +109,11 @@ const QualityControl: React.FC = () => {
             await maintenancePlansApi.create({
                 engineId: parseInt(newPlan.engineId),
                 planType: newPlan.planType,
-                maintenanceType: newPlan.maintenanceType,
+                maintenanceType: 'one-time',
                 description: newPlan.description,
                 scheduledDate: newPlan.scheduledDate,
                 dueHours: newPlan.dueHours ? parseFloat(newPlan.dueHours) : undefined,
                 dueCycles: newPlan.dueCycles ? parseInt(newPlan.dueCycles) : undefined,
-                periodicIntervalHours: newPlan.periodicIntervalHours ? parseFloat(newPlan.periodicIntervalHours) : undefined,
-                periodicIntervalCycles: newPlan.periodicIntervalCycles ? parseInt(newPlan.periodicIntervalCycles) : undefined,
                 status: 'Pending',
                 createdBy: user.fullName,
                 createdAt: new Date().toISOString()
@@ -142,22 +122,18 @@ const QualityControl: React.FC = () => {
             setNewPlan({
                 engineId: '',
                 planType: 'Rutin İnceleme',
-                maintenanceType: 'one-time',
                 description: '',
                 scheduledDate: '',
                 dueHours: '',
-                dueCycles: '',
-                periodicIntervalHours: '',
-                periodicIntervalCycles: ''
+                dueCycles: ''
             });
             setUploadedDocument(null);
             setCreateModalOpen(false);
             showSuccess('Bakım planı başarıyla oluşturuldu!');
             refetch();
-        } catch (error: any) {
-            console.error('Bakım planı oluşturma hatası:', error);
-            console.error('Hata detayı:', error.response?.data);
-            showError(`Bakım planı oluşturulamadı: ${error.response?.data?.error || error.message}`);
+        } catch (error) {
+            showError('Bakım planı oluşturulamadı');
+            console.error(error);
         }
     };
 
@@ -206,10 +182,9 @@ const QualityControl: React.FC = () => {
             setControlRequestModalOpen(false);
             showSuccess('Kontrol talebi başarıyla oluşturuldu!');
             refetch();
-        } catch (error: any) {
-            console.error('Kontrol talebi oluşturma hatası:', error);
-            console.error('Hata detayı:', error.response?.data);
-            showError(`Kontrol talebi oluşturulamadı: ${error.response?.data?.error || error.message}`);
+        } catch (error) {
+            showError('Kontrol talebi oluşturulamadı');
+            console.error(error);
         }
     };
 
@@ -265,38 +240,6 @@ const QualityControl: React.FC = () => {
         }
     };
 
-    // Complete control request
-    const handleCompleteControlRequest = async (id: number) => {
-        if (!user) return;
-        
-        try {
-            await controlRequestsApi.complete(id, user.fullName);
-            showSuccess('Kontrol talebi tamamlandı olarak işaretlendi!');
-            refetch();
-        } catch (error) {
-            showError('Kontrol talebi güncellenemedi');
-            console.error(error);
-        }
-    };
-
-    // Change control request status
-    const handleChangeControlRequestStatus = async (id: number, newStatus: 'Beklemede' | 'İşlemde' | 'Tamamlandı' | 'İptal') => {
-        if (!user) return;
-        
-        try {
-            await controlRequestsApi.update(id, {
-                status: newStatus,
-                completedBy: newStatus === 'Tamamlandı' ? user.fullName : undefined,
-                completedAt: newStatus === 'Tamamlandı' ? new Date().toISOString() : undefined
-            });
-            showSuccess('Kontrol talebi durumu güncellendi!');
-            refetch();
-        } catch (error) {
-            showError('Kontrol talebi güncellenemedi');
-            console.error(error);
-        }
-    };
-
     // Toggle selection
     const toggleSelection = (id: number) => {
         const newSelection = new Set(selectedItems);
@@ -337,35 +280,7 @@ const QualityControl: React.FC = () => {
         );
     };
 
-    const getControlRequestStatusBadge = (status: string) => {
-        const styles = {
-            'Beklemede': 'bg-yellow-500/20 text-yellow-400',
-            'İşlemde': 'bg-blue-500/20 text-blue-400',
-            'Tamamlandı': 'bg-green-500/20 text-green-400',
-            'İptal': 'bg-red-500/20 text-red-400'
-        };
-        return (
-            <span className={`px-2 py-1 rounded text-xs font-semibold ${styles[status as keyof typeof styles] || 'bg-gray-500/20 text-gray-400'}`}>
-                {status}
-            </span>
-        );
-    };
-
-    const getPriorityBadge = (priority: string) => {
-        const styles = {
-            'Düşük': 'bg-gray-500/20 text-gray-400',
-            'Orta': 'bg-blue-500/20 text-blue-400',
-            'Yüksek': 'bg-orange-500/20 text-orange-400',
-            'Kritik': 'bg-red-500/20 text-red-400'
-        };
-        return (
-            <span className={`px-2 py-1 rounded text-xs font-semibold ${styles[priority as keyof typeof styles] || 'bg-gray-500/20 text-gray-400'}`}>
-                {priority}
-            </span>
-        );
-    };
-
-    if (!maintenancePlans || !controlRequests || !engines) return <LoadingSpinner text="Kalite kontrol yükleniyor..." />;
+    if (!maintenancePlans || !engines) return <LoadingSpinner text="Kalite kontrol yükleniyor..." />;
 
     return (
         <div className="space-y-6">
@@ -533,66 +448,6 @@ const QualityControl: React.FC = () => {
                 </div>
             </div>
 
-            {/* Control Requests Table */}
-            <div className="bg-brand-card rounded-lg border border-brand-border">
-                <div className="p-4 border-b border-brand-border">
-                    <h2 className="text-lg font-bold text-white">Kontrol Talepleri</h2>
-                    <p className="text-brand-light text-sm">Oluşturulan kontrol taleplerini görüntüleyin ve durumlarını güncelleyin.</p>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="border-b border-brand-border bg-brand-dark">
-                            <tr>
-                                <th className="p-3 font-semibold">MOTOR</th>
-                                <th className="p-3 font-semibold">KONTROL TİPİ</th>
-                                <th className="p-3 font-semibold">AÇIKLAMA</th>
-                                <th className="p-3 font-semibold">TALEPTARİHİ</th>
-                                <th className="p-3 font-semibold">ÖNCELİK</th>
-                                <th className="p-3 font-semibold">DURUM</th>
-                                <th className="p-3 font-semibold">OLUŞTURAN</th>
-                                <th className="p-3 font-semibold">TAMAMLAYAN</th>
-                                {canApprove && <th className="p-3 font-semibold">İŞLEMLER</th>}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {controlRequests.map(request => (
-                                <tr key={request.id} className="border-b border-brand-border hover:bg-brand-dark">
-                                    <td className="p-3 font-semibold">
-                                        {engines?.find(e => e.id === request.engineId)?.serialNumber || 'Yok'}
-                                    </td>
-                                    <td className="p-3">{request.controlType}</td>
-                                    <td className="p-3 max-w-xs truncate">{request.description}</td>
-                                    <td className="p-3">{new Date(request.requestDate).toLocaleDateString('tr-TR')}</td>
-                                    <td className="p-3">{getPriorityBadge(request.priority)}</td>
-                                    <td className="p-3">{getControlRequestStatusBadge(request.status)}</td>
-                                    <td className="p-3 text-brand-light">{request.createdBy}</td>
-                                    <td className="p-3 text-brand-light">{request.completedBy || '-'}</td>
-                                    {canApprove && (
-                                        <td className="p-3">
-                                            <select
-                                                value={request.status}
-                                                onChange={(e) => handleChangeControlRequestStatus(request.id!, e.target.value as any)}
-                                                className="bg-brand-dark border border-brand-border rounded px-2 py-1 text-xs text-white"
-                                            >
-                                                <option value="Beklemede">Beklemede</option>
-                                                <option value="İşlemde">İşlemde</option>
-                                                <option value="Tamamlandı">Tamamlandı</option>
-                                                <option value="İptal">İptal</option>
-                                            </select>
-                                        </td>
-                                    )}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {controlRequests.length === 0 && (
-                        <div className="p-12 text-center text-brand-light">
-                            Henüz kontrol talebi bulunmuyor.
-                        </div>
-                    )}
-                </div>
-            </div>
-
             {/* Create Maintenance Plan Modal */}
             {isCreateModalOpen && (
                 <Modal isOpen={isCreateModalOpen} onClose={() => setCreateModalOpen(false)} title="Bakım Planı Oluştur">
@@ -626,19 +481,6 @@ const QualityControl: React.FC = () => {
                             <option value="Diğer">Diğer</option>
                         </select>
 
-                        <div>
-                            <label className="block text-sm font-semibold text-brand-light mb-2">Bakım Tipi</label>
-                            <select
-                                value={newPlan.maintenanceType}
-                                onChange={(e) => setNewPlan({...newPlan, maintenanceType: e.target.value as 'one-time' | 'periodic'})}
-                                className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                required
-                            >
-                                <option value="one-time">Tek Seferlik</option>
-                                <option value="periodic">Periyodik</option>
-                            </select>
-                        </div>
-
                         <textarea
                             value={newPlan.description}
                             onChange={(e) => setNewPlan({...newPlan, description: e.target.value})}
@@ -648,64 +490,31 @@ const QualityControl: React.FC = () => {
                             required
                         />
 
-                        {newPlan.maintenanceType === 'one-time' && (
+                        <input
+                            type="date"
+                            value={newPlan.scheduledDate}
+                            onChange={(e) => setNewPlan({...newPlan, scheduledDate: e.target.value})}
+                            className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
+                            required
+                        />
+
+                        <div className="grid grid-cols-2 gap-4">
                             <input
-                                type="date"
-                                value={newPlan.scheduledDate}
-                                onChange={(e) => setNewPlan({...newPlan, scheduledDate: e.target.value})}
-                                className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                placeholder="Planlı Tarih"
-                                required
+                                type="number"
+                                step="0.1"
+                                value={newPlan.dueHours}
+                                onChange={(e) => setNewPlan({...newPlan, dueHours: e.target.value})}
+                                placeholder="Süre (Saat) - Opsiyonel"
+                                className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                             />
-                        )}
-
-                        {newPlan.maintenanceType === 'one-time' && (
-                            <div className="grid grid-cols-2 gap-4">
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={newPlan.dueHours}
-                                    onChange={(e) => setNewPlan({...newPlan, dueHours: e.target.value})}
-                                    placeholder="Motorun Kaçıncı Saatinde - Opsiyonel"
-                                    className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                />
-                                <input
-                                    type="number"
-                                    value={newPlan.dueCycles}
-                                    onChange={(e) => setNewPlan({...newPlan, dueCycles: e.target.value})}
-                                    placeholder="Kaçıncı Çevrimde - Opsiyonel"
-                                    className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                />
-                            </div>
-                        )}
-
-                        {newPlan.maintenanceType === 'periodic' && (
-                            <div>
-                                <label className="block text-sm font-semibold text-brand-light mb-2">
-                                    Periyodik Aralık (En az birini girin)
-                                </label>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={newPlan.periodicIntervalHours}
-                                        onChange={(e) => setNewPlan({...newPlan, periodicIntervalHours: e.target.value})}
-                                        placeholder="Her X Saatte Bir"
-                                        className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                    />
-                                    <input
-                                        type="number"
-                                        value={newPlan.periodicIntervalCycles}
-                                        onChange={(e) => setNewPlan({...newPlan, periodicIntervalCycles: e.target.value})}
-                                        placeholder="Her X Çevrimde Bir"
-                                        className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                    />
-                                </div>
-                                <p className="mt-2 text-xs text-brand-light">
-                                    Örn: 100 saat girerseniz, motor her 100 saat çalıştığında bakım gerekir
-                                </p>
-                            </div>
-                        )}
+                            <input
+                                type="number"
+                                value={newPlan.dueCycles}
+                                onChange={(e) => setNewPlan({...newPlan, dueCycles: e.target.value})}
+                                placeholder="Çevrim - Opsiyonel"
+                                className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
+                            />
+                        </div>
 
                         <div>
                             <label className="block text-sm font-semibold text-brand-light mb-2">

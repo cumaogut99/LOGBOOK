@@ -655,34 +655,15 @@ router.post('/control-requests', async (req, res) => {
 
 router.put('/control-requests/:id', async (req, res) => {
   try {
-    // Get current record first
-    const current = await dbGet('SELECT * FROM control_requests WHERE id = ?', [req.params.id]);
-    if (!current) {
-      return res.status(404).json({ error: 'Control request not found' });
-    }
-
-    // Merge with updates
-    const updated = {
-      controlType: req.body.controlType !== undefined ? req.body.controlType : current.controlType,
-      description: req.body.description !== undefined ? req.body.description : current.description,
-      requestDate: req.body.requestDate !== undefined ? req.body.requestDate : current.requestDate,
-      priority: req.body.priority !== undefined ? req.body.priority : current.priority,
-      status: req.body.status !== undefined ? req.body.status : current.status,
-      completedBy: req.body.completedBy !== undefined ? req.body.completedBy : current.completedBy,
-      completedAt: req.body.completedAt !== undefined ? req.body.completedAt : current.completedAt,
-      documentId: req.body.documentId !== undefined ? req.body.documentId : current.documentId,
-      documentName: req.body.documentName !== undefined ? req.body.documentName : current.documentName
-    };
+    const { controlType, description, requestDate, priority, status, completedBy, completedAt, documentId, documentName } = req.body;
     
     await dbRun(
       'UPDATE control_requests SET controlType = ?, description = ?, requestDate = ?, priority = ?, status = ?, completedBy = ?, completedAt = ?, documentId = ?, documentName = ? WHERE id = ?',
-      [updated.controlType, updated.description, updated.requestDate, updated.priority, updated.status, updated.completedBy, updated.completedAt, updated.documentId, updated.documentName, req.params.id]
+      [controlType, description, requestDate, priority, status, completedBy || null, completedAt || null, documentId || null, documentName || null, req.params.id]
     );
     
-    const result = await dbGet('SELECT * FROM control_requests WHERE id = ?', [req.params.id]);
-    res.json(result);
+    res.json({ id: req.params.id, ...req.body });
   } catch (err) {
-    console.error('Control request update error:', err);
     res.status(500).json({ error: err.message });
   }
 });

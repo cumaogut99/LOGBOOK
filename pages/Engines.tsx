@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useQuery, useRefetch } from '../hooks/useData';
 import { enginesApi, swapsApi } from '../lib/client.ts';
+import { brakeTypesApi } from '../lib/newApis.ts';
 import type { Engine, Component as BomComponent, ActivityLogItem, BuildReportHistory } from '../types';
 import { PencilIcon, CirclePlusIcon, CircleMinusIcon } from '../constants';
 import { EngineModal } from '../components/EngineModal';
@@ -23,9 +24,10 @@ const Engines: React.FC = () => {
     
     const { refreshKey, refetch } = useRefetch();
     const engines = useQuery(() => enginesApi.getAll(), [refreshKey]);
+    const brakeTypes = useQuery(() => brakeTypesApi.getAll(), [refreshKey]);
     const selectedEngine = engines?.find(e => e.id === selectedEngineId);
 
-    if (!engines) return <LoadingSpinner text="Motorlar yükleniyor..." />;
+    if (!engines || !brakeTypes) return <LoadingSpinner text="Motorlar yükleniyor..." />;
 
     const handleSelectEngine = (engine: Engine) => {
         setSelectedEngineId(engine.id ?? null);
@@ -65,7 +67,7 @@ const Engines: React.FC = () => {
     };
 
     if (selectedEngine) {
-        return <EngineDetails engine={selectedEngine} onBack={handleBack} onEdit={handleEditEngine} user={user} />;
+        return <EngineDetails engine={selectedEngine} onBack={handleBack} onEdit={handleEditEngine} user={user} brakeTypes={brakeTypes} />;
     }
 
     return (
@@ -81,6 +83,7 @@ const Engines: React.FC = () => {
                 onSave={handleSaveEngine}
                 engine={editingEngine}
                 mode={modalMode}
+                brakeTypes={brakeTypes}
             />
         </>
     );
@@ -131,10 +134,12 @@ const EngineDetails: React.FC<{
     engine: Engine, 
     onBack: () => void,
     onEdit: (engine: Engine) => void,
-    user: any
-}> = ({ engine, onBack, onEdit, user }) => {
+    user: any,
+    brakeTypes: any[]
+}> = ({ engine, onBack, onEdit, user, brakeTypes }) => {
     const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set([1, 100]));
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+    const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
     const [selectedBRFile, setSelectedBRFile] = useState<File | null>(null);
     const [isUploadingBR, setIsUploadingBR] = useState(false);
     const [isBRHistoryOpen, setIsBRHistoryOpen] = useState(false);
@@ -230,13 +235,29 @@ const EngineDetails: React.FC<{
         setIsUpdatingStatus(true);
         try {
             await enginesApi.update(engine.id, { status: newStatus as Engine['status'] });
-            showSuccess(`Motor durumu ${newStatus === 'Active' ? 'Aktif' : newStatus === 'AOG' ? 'AOG' : 'Bakım Gerekli'} olarak güncellendi`);
+            showSuccess(`Motor durumu ${newStatus === 'Aktif' ? 'Aktif' : 'Deaktif'} olarak güncellendi`);
             refetch();
         } catch (error) {
             showError('Motor durumu güncellenemedi');
             console.error(error);
         } finally {
             setIsUpdatingStatus(false);
+        }
+    };
+
+    const handleLocationChange = async (newLocation: string) => {
+        if (!engine.id) return;
+        
+        setIsUpdatingLocation(true);
+        try {
+            await enginesApi.update(engine.id, { location: newLocation });
+            showSuccess(`Motor lokasyonu "${newLocation}" olarak güncellendi`);
+            refetch();
+        } catch (error) {
+            showError('Motor lokasyonu güncellenemedi');
+            console.error(error);
+        } finally {
+            setIsUpdatingLocation(false);
         }
     };
 
@@ -396,7 +417,7 @@ const EngineDetails: React.FC<{
             const hasChildren = comp.children && comp.children.length > 0;
 
             const row = (
-                <tr key={comp.id} className="border-b border-brand-border hover:bg-brand-dark">
+                <tr key={`${comp.id}-${comp.serialNumber}-${level}`} className="border-b border-brand-border hover:bg-brand-dark">
                     <td className="p-3" style={{ paddingLeft: `${1 + level * 2}rem` }}>
                         <div className="flex items-center">
                             {hasChildren ? (
@@ -495,13 +516,34 @@ const EngineDetails: React.FC<{
                        <h3 className="text-lg font-bold text-white">Motor Bilgileri</h3>
                        <button 
                            onClick={() => onEdit(engine)}
-                           className="text-brand-light hover:text-white transition-colors"
+                           className="text-brand-primary hover:text-blue-400 transition-colors cursor-pointer p-2 hover:bg-brand-dark rounded"
+                           title="Motor bilgilerini düzenle"
                        >
                            <PencilIcon/>
                        </button>
                     </div>
                     <div><span className="font-semibold">Seri Numarası:</span> {engine.serialNumber}</div>
-                    <div><span className="font-semibold">Üretici:</span> {engine.manufacturer}</div>
+                    <div className="flex items-center justify-between">
+                        <span className="font-semibold">Lokasyon:</span>
+                        <select 
+                            value={engine.location || ''} 
+                            onChange={(e) => handleLocationChange(e.target.value)}
+                            disabled={isUpdatingLocation}
+                            className="bg-brand-dark border border-brand-border rounded-md p-1 text-white text-sm hover:bg-opacity-80 transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                            <option value="">Belirtilmemiş</option>
+                            <option value="Montaj">Montaj</option>
+                            <option value="Depo">Depo</option>
+                            <option value="Test Alanı">Test Alanı</option>
+                            {brakeTypes && brakeTypes.length > 0 && (
+                                <optgroup label="Bremze Tipleri">
+                                    {brakeTypes.map(bt => (
+                                        <option key={`eng-detail-brake-${bt.id}`} value={bt.name}>{bt.name}</option>
+                                    ))}
+                                </optgroup>
+                            )}
+                        </select>
+                    </div>
                     <div className="flex items-center justify-between">
                         <span className="font-semibold">Durum:</span>
                         <select 
@@ -510,9 +552,8 @@ const EngineDetails: React.FC<{
                             disabled={isUpdatingStatus}
                             className="bg-brand-dark border border-brand-border rounded-md p-1 text-white text-sm hover:bg-opacity-80 transition-colors disabled:opacity-50 cursor-pointer"
                         >
-                            <option value="Active">Aktif</option>
-                            <option value="Maintenance Due">Bakım Gerekli</option>
-                            <option value="AOG">AOG</option>
+                            <option value="Aktif">Aktif</option>
+                            <option value="Deaktif">Deaktif</option>
                         </select>
                     </div>
                 </div>

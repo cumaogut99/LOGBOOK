@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Engine, EngineComponent } from '../types';
+import { Engine, EngineComponent, BrakeType } from '../types';
 
 interface EngineModalProps {
   isOpen: boolean;
@@ -7,6 +7,7 @@ interface EngineModalProps {
   onSave: (engine: Partial<Engine>) => Promise<void>;
   engine?: Engine | null;
   mode: 'add' | 'edit';
+  brakeTypes?: BrakeType[]; // Bremze tipleri için
 }
 
 export const EngineModal: React.FC<EngineModalProps> = ({
@@ -14,13 +15,14 @@ export const EngineModal: React.FC<EngineModalProps> = ({
   onClose,
   onSave,
   engine,
-  mode
+  mode,
+  brakeTypes = []
 }) => {
   const [formData, setFormData] = useState<Partial<Engine>>({
     serialNumber: '',
-    manufacturer: '',
+    manufacturer: '-', // Hidden field for backend compatibility
     model: '',
-    status: 'Active',
+    status: 'Aktif',
     totalHours: 0,
     totalCycles: 0,
     location: '',
@@ -32,13 +34,16 @@ export const EngineModal: React.FC<EngineModalProps> = ({
 
   useEffect(() => {
     if (engine && mode === 'edit') {
-      setFormData(engine);
+      setFormData({
+        ...engine,
+        manufacturer: engine.manufacturer || '-' // Ensure manufacturer has a value
+      });
     } else {
       setFormData({
         serialNumber: '',
-        manufacturer: '',
+        manufacturer: '-', // Default value for backend compatibility
         model: '',
-        status: 'Active',
+        status: 'Aktif',
         totalHours: 0,
         totalCycles: 0,
         location: '',
@@ -53,16 +58,13 @@ export const EngineModal: React.FC<EngineModalProps> = ({
     const newErrors: Record<string, string> = {};
 
     if (!formData.serialNumber?.trim()) {
-      newErrors.serialNumber = 'Serial number is required';
-    }
-    if (!formData.manufacturer?.trim()) {
-      newErrors.manufacturer = 'Manufacturer is required';
+      newErrors.serialNumber = 'Seri numarası gereklidir';
     }
     if (!formData.model?.trim()) {
-      newErrors.model = 'Model is required';
+      newErrors.model = 'Model gereklidir';
     }
     if (!formData.location?.trim()) {
-      newErrors.location = 'Location is required';
+      newErrors.location = 'Lokasyon gereklidir';
     }
 
     setErrors(newErrors);
@@ -76,10 +78,20 @@ export const EngineModal: React.FC<EngineModalProps> = ({
 
     setLoading(true);
     try {
-      await onSave(formData);
+      // Ensure all required fields are set for backend compatibility
+      const engineData = {
+        ...formData,
+        manufacturer: formData.manufacturer || '-',
+        nextServiceDue: formData.nextServiceDue || '0', // NOT NULL field in DB
+        components: formData.components || [],
+        activityLog: formData.activityLog || []
+      };
+      console.log('Sending engine data:', engineData);
+      await onSave(engineData);
       onClose();
     } catch (error) {
       console.error('Error saving engine:', error);
+      throw error; // Re-throw to show error in UI
     } finally {
       setLoading(false);
     }
@@ -100,7 +112,7 @@ export const EngineModal: React.FC<EngineModalProps> = ({
       <div className="bg-brand-card border border-brand-border rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-brand-card border-b border-brand-border p-6 z-10">
           <h2 className="text-2xl font-bold text-white">
-            {mode === 'add' ? 'Add New Engine' : 'Edit Engine'}
+            {mode === 'add' ? 'Yeni Motor Ekle' : 'Motor Düzenle'}
           </h2>
         </div>
 
@@ -109,34 +121,17 @@ export const EngineModal: React.FC<EngineModalProps> = ({
             {/* Serial Number */}
             <div>
               <label className="block text-sm font-semibold text-white mb-2">
-                Serial Number <span className="text-red-500">*</span>
+                Seri Numarası <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={formData.serialNumber || ''}
                 onChange={(e) => handleChange('serialNumber', e.target.value)}
                 className={`w-full bg-brand-dark border ${errors.serialNumber ? 'border-red-500' : 'border-brand-border'} rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-primary`}
-                placeholder="e.g., ENG-2024-001"
+                placeholder="örn: PD170"
               />
               {errors.serialNumber && (
                 <p className="text-red-500 text-sm mt-1">{errors.serialNumber}</p>
-              )}
-            </div>
-
-            {/* Manufacturer */}
-            <div>
-              <label className="block text-sm font-semibold text-white mb-2">
-                Manufacturer <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.manufacturer || ''}
-                onChange={(e) => handleChange('manufacturer', e.target.value)}
-                className={`w-full bg-brand-dark border ${errors.manufacturer ? 'border-red-500' : 'border-brand-border'} rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-primary`}
-                placeholder="e.g., Pratt & Whitney"
-              />
-              {errors.manufacturer && (
-                <p className="text-red-500 text-sm mt-1">{errors.manufacturer}</p>
               )}
             </div>
 
@@ -150,7 +145,7 @@ export const EngineModal: React.FC<EngineModalProps> = ({
                 value={formData.model || ''}
                 onChange={(e) => handleChange('model', e.target.value)}
                 className={`w-full bg-brand-dark border ${errors.model ? 'border-red-500' : 'border-brand-border'} rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-primary`}
-                placeholder="e.g., PW1100G-JM"
+                placeholder="örn: PW1100G-JM"
               />
               {errors.model && (
                 <p className="text-red-500 text-sm mt-1">{errors.model}</p>
@@ -160,15 +155,25 @@ export const EngineModal: React.FC<EngineModalProps> = ({
             {/* Location */}
             <div>
               <label className="block text-sm font-semibold text-white mb-2">
-                Location <span className="text-red-500">*</span>
+                Lokasyon <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
+              <select
                 value={formData.location || ''}
                 onChange={(e) => handleChange('location', e.target.value)}
                 className={`w-full bg-brand-dark border ${errors.location ? 'border-red-500' : 'border-brand-border'} rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-primary`}
-                placeholder="e.g., Hangar A"
-              />
+              >
+                <option value="">-- Lokasyon Seçin --</option>
+                <option value="Montaj">Montaj</option>
+                <option value="Depo">Depo</option>
+                <option value="Test Alanı">Test Alanı</option>
+                {brakeTypes && brakeTypes.length > 0 && (
+                  <optgroup label="Bremze Tipleri">
+                    {brakeTypes.map(bt => (
+                      <option key={`brake-${bt.id}`} value={bt.name}>{bt.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
               {errors.location && (
                 <p className="text-red-500 text-sm mt-1">{errors.location}</p>
               )}
@@ -177,25 +182,22 @@ export const EngineModal: React.FC<EngineModalProps> = ({
             {/* Status */}
             <div>
               <label className="block text-sm font-semibold text-white mb-2">
-                Status
+                Durum
               </label>
               <select
-                value={formData.status || 'Active'}
+                value={formData.status || 'Aktif'}
                 onChange={(e) => handleChange('status', e.target.value)}
                 className="w-full bg-brand-dark border border-brand-border rounded-md px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
               >
-                <option value="Active">Active</option>
-                <option value="Maintenance Due">Maintenance Due</option>
-                <option value="In Maintenance">In Maintenance</option>
-                <option value="AOG">AOG (Aircraft on Ground)</option>
-                <option value="Retired">Retired</option>
+                <option value="Aktif">Aktif</option>
+                <option value="Deaktif">Deaktif</option>
               </select>
             </div>
 
             {/* Total Hours */}
             <div>
               <label className="block text-sm font-semibold text-white mb-2">
-                Total Hours
+                Toplam Saat
               </label>
               <input
                 type="number"
@@ -210,7 +212,7 @@ export const EngineModal: React.FC<EngineModalProps> = ({
             {/* Total Cycles */}
             <div>
               <label className="block text-sm font-semibold text-white mb-2">
-                Total Cycles
+                Toplam Cycle
               </label>
               <input
                 type="number"
@@ -230,7 +232,7 @@ export const EngineModal: React.FC<EngineModalProps> = ({
               disabled={loading}
               className="px-6 py-2 bg-brand-dark hover:bg-opacity-80 text-white rounded-md transition-colors disabled:opacity-50"
             >
-              Cancel
+              İptal
             </button>
             <button
               type="submit"
@@ -240,10 +242,10 @@ export const EngineModal: React.FC<EngineModalProps> = ({
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Saving...
+                  Kaydediliyor...
                 </>
               ) : (
-                mode === 'add' ? 'Add Engine' : 'Save Changes'
+                mode === 'add' ? 'Motor Ekle' : 'Değişiklikleri Kaydet'
               )}
             </button>
           </div>

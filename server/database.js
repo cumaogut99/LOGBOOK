@@ -106,8 +106,37 @@ function initializeDatabase() {
       description TEXT NOT NULL,
       quantity INTEGER NOT NULL DEFAULT 1,
       location TEXT NOT NULL,
-      userName TEXT NOT NULL
+      userName TEXT NOT NULL,
+      createdAt TEXT,
+      assemblyGroup TEXT,
+      assemblyPartNumber TEXT,
+      assemblySerialNumber TEXT
     )`);
+
+    // Add new columns to existing inventory table
+    db.run(`ALTER TABLE inventory ADD COLUMN createdAt TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error('Error adding createdAt column:', err);
+      }
+    });
+    
+    db.run(`ALTER TABLE inventory ADD COLUMN assemblyGroup TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error('Error adding assemblyGroup column:', err);
+      }
+    });
+
+    db.run(`ALTER TABLE inventory ADD COLUMN assemblyPartNumber TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error('Error adding assemblyPartNumber column:', err);
+      }
+    });
+
+    db.run(`ALTER TABLE inventory ADD COLUMN assemblySerialNumber TEXT`, (err) => {
+      if (err && !err.message.includes('duplicate column')) {
+        console.error('Error adding assemblySerialNumber column:', err);
+      }
+    });
 
     // Documents table (enhanced)
     db.run(`CREATE TABLE IF NOT EXISTS documents (
@@ -169,6 +198,28 @@ function initializeDatabase() {
     // Create indexes for new tables
     db.run(`CREATE INDEX IF NOT EXISTS idx_maintenance_plans_engineId ON maintenance_plans(engineId)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_maintenance_plans_status ON maintenance_plans(status)`);
+
+    // Control Requests table
+    db.run(`CREATE TABLE IF NOT EXISTS control_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      engineId INTEGER NOT NULL,
+      controlType TEXT NOT NULL,
+      description TEXT NOT NULL,
+      requestDate TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'Orta',
+      status TEXT NOT NULL DEFAULT 'Beklemede',
+      createdBy TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      completedBy TEXT,
+      completedAt TEXT,
+      documentId INTEGER,
+      documentName TEXT,
+      FOREIGN KEY (engineId) REFERENCES engines(id),
+      FOREIGN KEY (documentId) REFERENCES documents(id)
+    )`);
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_control_requests_engineId ON control_requests(engineId)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_control_requests_status ON control_requests(status)`);
 
     // Add new columns to maintenance_plans table for periodic maintenance
     db.run(`ALTER TABLE maintenance_plans ADD COLUMN maintenanceType TEXT DEFAULT 'one-time'`, (err) => {

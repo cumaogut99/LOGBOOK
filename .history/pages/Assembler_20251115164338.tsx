@@ -257,6 +257,7 @@ const Assembler: React.FC = () => {
                             partNumber: removedComponent.partNumber,
                             serialNumber: removedComponent.serialNumber,
                             description: removedComponent.description,
+                            quantity: 1,
                             location: 'Depo',
                             userName: user.fullName
                         });

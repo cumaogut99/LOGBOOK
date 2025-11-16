@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { TestType, BrakeType, MaintenancePlan, Document } from '../types';
+import { TestType, BrakeType, MaintenancePlan, Document, ControlRequest } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -148,5 +148,37 @@ export const documentsApi = {
   
   delete: async (id: number): Promise<void> => {
     await axios.delete(`${API_BASE_URL}/documents/${id}`);
+  }
+};
+
+// Control Requests API
+export const controlRequestsApi = {
+  getAll: async (): Promise<ControlRequest[]> => {
+    const response = await axios.get(`${API_BASE_URL}/control-requests`);
+    return response.data;
+  },
+  
+  getByEngineId: async (engineId: number): Promise<ControlRequest[]> => {
+    const response = await axios.get(`${API_BASE_URL}/control-requests?engineId=${engineId}`);
+    return response.data;
+  },
+  
+  create: async (request: Omit<ControlRequest, 'id'>): Promise<ControlRequest> => {
+    const response = await axios.post(`${API_BASE_URL}/control-requests`, request);
+    return response.data;
+  },
+  
+  update: async (id: number, request: Partial<ControlRequest>): Promise<ControlRequest> => {
+    const response = await axios.put(`${API_BASE_URL}/control-requests/${id}`, request);
+    return response.data;
+  },
+  
+  delete: async (id: number): Promise<void> => {
+    await axios.delete(`${API_BASE_URL}/control-requests/${id}`);
+  },
+  
+  complete: async (id: number, completedBy: string): Promise<ControlRequest> => {
+    const response = await axios.patch(`${API_BASE_URL}/control-requests/${id}/complete`, { completedBy });
+    return response.data;
   }
 };

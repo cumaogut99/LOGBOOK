@@ -176,7 +176,7 @@ const Assembler: React.FC = () => {
                     }
                 }
                 
-                setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '', assemblyGroupToInstall: '' });
+                setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '' });
                 setUploadedFiles([]);
                 showSuccess(`Alt montaj grubu "${swapState.assemblyGroup}" değişimi kaydedildi! Yeni yapılandırma için BR yükleyin.`);
                 refetch();
@@ -257,13 +257,14 @@ const Assembler: React.FC = () => {
                             partNumber: removedComponent.partNumber,
                             serialNumber: removedComponent.serialNumber,
                             description: removedComponent.description,
+                            quantity: 1,
                             location: 'Depo',
                             userName: user.fullName
                         });
                     }
                 }
                 
-                setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '', assemblyGroupToInstall: '' });
+                setSwapState({ engineId: '', removeId: '', installId: '', swapType: 'Component', assemblyGroup: '' });
                 setUploadedFiles([]);
                 showSuccess('Parça değişimi tamamlandı! Motor bileşenleri ve depo güncellendi.');
                 refetch();
@@ -348,7 +349,7 @@ const Assembler: React.FC = () => {
                                         type="radio"
                                         value="Component"
                                         checked={swapState.swapType === 'Component'}
-                                        onChange={(e) => setSwapState({...swapState, swapType: e.target.value as 'Component', assemblyGroup: '', assemblyGroupToInstall: ''})}
+                                        onChange={(e) => setSwapState({...swapState, swapType: e.target.value as 'Component', assemblyGroup: ''})}
                                         className="form-radio text-brand-primary"
                                     />
                                     <span className="text-white">Tekil Parça</span>
@@ -369,7 +370,7 @@ const Assembler: React.FC = () => {
                         {/* Engine Selection */}
                         <select
                             value={swapState.engineId}
-                            onChange={(e) => setSwapState({...swapState, engineId: e.target.value, assemblyGroup: '', assemblyGroupToInstall: ''})}
+                            onChange={(e) => setSwapState({...swapState, engineId: e.target.value, assemblyGroup: ''})}
                             className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                             required
                         >

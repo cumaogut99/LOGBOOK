@@ -31,13 +31,10 @@ const QualityControl: React.FC = () => {
     const [newPlan, setNewPlan] = useState({
         engineId: '',
         planType: 'Rutin İnceleme',
-        maintenanceType: 'one-time' as 'one-time' | 'periodic',
         description: '',
         scheduledDate: '',
         dueHours: '',
-        dueCycles: '',
-        periodicIntervalHours: '',
-        periodicIntervalCycles: ''
+        dueCycles: ''
     });
 
     // New control request form
@@ -92,23 +89,9 @@ const QualityControl: React.FC = () => {
     // Create new maintenance plan
     const handleCreatePlan = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !newPlan.engineId || !newPlan.description) {
+        if (!user || !newPlan.engineId || !newPlan.description || !newPlan.scheduledDate) {
             showError('Lütfen tüm gerekli alanları doldurun');
             return;
-        }
-
-        // Validation for one-time maintenance
-        if (newPlan.maintenanceType === 'one-time' && !newPlan.scheduledDate) {
-            showError('Tek seferlik bakım için planlı tarih gereklidir');
-            return;
-        }
-
-        // Validation for periodic maintenance
-        if (newPlan.maintenanceType === 'periodic') {
-            if (!newPlan.periodicIntervalHours && !newPlan.periodicIntervalCycles) {
-                showError('Periyodik bakım için en az bir periyodik aralık (saat veya çevrim) girmelisiniz');
-                return;
-            }
         }
         
         try {
@@ -127,13 +110,11 @@ const QualityControl: React.FC = () => {
             await maintenancePlansApi.create({
                 engineId: parseInt(newPlan.engineId),
                 planType: newPlan.planType,
-                maintenanceType: newPlan.maintenanceType,
+                maintenanceType: 'one-time',
                 description: newPlan.description,
                 scheduledDate: newPlan.scheduledDate,
                 dueHours: newPlan.dueHours ? parseFloat(newPlan.dueHours) : undefined,
                 dueCycles: newPlan.dueCycles ? parseInt(newPlan.dueCycles) : undefined,
-                periodicIntervalHours: newPlan.periodicIntervalHours ? parseFloat(newPlan.periodicIntervalHours) : undefined,
-                periodicIntervalCycles: newPlan.periodicIntervalCycles ? parseInt(newPlan.periodicIntervalCycles) : undefined,
                 status: 'Pending',
                 createdBy: user.fullName,
                 createdAt: new Date().toISOString()
@@ -142,13 +123,10 @@ const QualityControl: React.FC = () => {
             setNewPlan({
                 engineId: '',
                 planType: 'Rutin İnceleme',
-                maintenanceType: 'one-time',
                 description: '',
                 scheduledDate: '',
                 dueHours: '',
-                dueCycles: '',
-                periodicIntervalHours: '',
-                periodicIntervalCycles: ''
+                dueCycles: ''
             });
             setUploadedDocument(null);
             setCreateModalOpen(false);
@@ -626,19 +604,6 @@ const QualityControl: React.FC = () => {
                             <option value="Diğer">Diğer</option>
                         </select>
 
-                        <div>
-                            <label className="block text-sm font-semibold text-brand-light mb-2">Bakım Tipi</label>
-                            <select
-                                value={newPlan.maintenanceType}
-                                onChange={(e) => setNewPlan({...newPlan, maintenanceType: e.target.value as 'one-time' | 'periodic'})}
-                                className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                required
-                            >
-                                <option value="one-time">Tek Seferlik</option>
-                                <option value="periodic">Periyodik</option>
-                            </select>
-                        </div>
-
                         <textarea
                             value={newPlan.description}
                             onChange={(e) => setNewPlan({...newPlan, description: e.target.value})}
@@ -648,64 +613,31 @@ const QualityControl: React.FC = () => {
                             required
                         />
 
-                        {newPlan.maintenanceType === 'one-time' && (
+                        <input
+                            type="date"
+                            value={newPlan.scheduledDate}
+                            onChange={(e) => setNewPlan({...newPlan, scheduledDate: e.target.value})}
+                            className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
+                            required
+                        />
+
+                        <div className="grid grid-cols-2 gap-4">
                             <input
-                                type="date"
-                                value={newPlan.scheduledDate}
-                                onChange={(e) => setNewPlan({...newPlan, scheduledDate: e.target.value})}
-                                className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                placeholder="Planlı Tarih"
-                                required
+                                type="number"
+                                step="0.1"
+                                value={newPlan.dueHours}
+                                onChange={(e) => setNewPlan({...newPlan, dueHours: e.target.value})}
+                                placeholder="Süre (Saat) - Opsiyonel"
+                                className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                             />
-                        )}
-
-                        {newPlan.maintenanceType === 'one-time' && (
-                            <div className="grid grid-cols-2 gap-4">
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={newPlan.dueHours}
-                                    onChange={(e) => setNewPlan({...newPlan, dueHours: e.target.value})}
-                                    placeholder="Motorun Kaçıncı Saatinde - Opsiyonel"
-                                    className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                />
-                                <input
-                                    type="number"
-                                    value={newPlan.dueCycles}
-                                    onChange={(e) => setNewPlan({...newPlan, dueCycles: e.target.value})}
-                                    placeholder="Kaçıncı Çevrimde - Opsiyonel"
-                                    className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                />
-                            </div>
-                        )}
-
-                        {newPlan.maintenanceType === 'periodic' && (
-                            <div>
-                                <label className="block text-sm font-semibold text-brand-light mb-2">
-                                    Periyodik Aralık (En az birini girin)
-                                </label>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={newPlan.periodicIntervalHours}
-                                        onChange={(e) => setNewPlan({...newPlan, periodicIntervalHours: e.target.value})}
-                                        placeholder="Her X Saatte Bir"
-                                        className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                    />
-                                    <input
-                                        type="number"
-                                        value={newPlan.periodicIntervalCycles}
-                                        onChange={(e) => setNewPlan({...newPlan, periodicIntervalCycles: e.target.value})}
-                                        placeholder="Her X Çevrimde Bir"
-                                        className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
-                                    />
-                                </div>
-                                <p className="mt-2 text-xs text-brand-light">
-                                    Örn: 100 saat girerseniz, motor her 100 saat çalıştığında bakım gerekir
-                                </p>
-                            </div>
-                        )}
+                            <input
+                                type="number"
+                                value={newPlan.dueCycles}
+                                onChange={(e) => setNewPlan({...newPlan, dueCycles: e.target.value})}
+                                placeholder="Çevrim - Opsiyonel"
+                                className="bg-brand-dark border border-brand-border rounded-md p-2 text-white"
+                            />
+                        </div>
 
                         <div>
                             <label className="block text-sm font-semibold text-brand-light mb-2">
