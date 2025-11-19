@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useRefetch } from '../hooks/useData';
 import { faultsApi, enginesApi, documentsApi } from '../lib/client.ts';
 import { documentsApi as newDocsApi } from '../lib/newApis.ts';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../context/AuthContext';
 import { Fault, Severity } from '../types';
 import { PencilIcon, TrashIcon, PaperclipIcon } from '../constants';
 import Modal from '../components/Modal';

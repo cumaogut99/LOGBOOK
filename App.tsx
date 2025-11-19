@@ -1,7 +1,7 @@
 // src/App.tsx
 import React from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from './hooks/useAuth';
+import { useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/Toast';
 import { LoadingSpinner } from './components/LoadingSpinner';
 

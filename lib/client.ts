@@ -72,6 +72,41 @@ export const enginesApi = {
     const response = await api.get('/engines/count');
     return response.data.count;
   },
+  
+  // Build Report History
+  getBuildReportHistory: async (engineId: number) => {
+    const response = await api.get(`/engines/${engineId}/build-report-history`);
+    return response.data;
+  },
+  
+  saveBuildReportHistory: async (engineId: number, data: {
+    uploadedBy: string;
+    fileName: string;
+    components: any[];
+    addedCount: number;
+    updatedCount: number;
+    removedCount: number;
+  }) => {
+    const response = await api.post(`/engines/${engineId}/build-report-history`, data);
+    return response.data;
+  },
+  
+  // Life Limit Alerts
+  getLifeLimitAlerts: async (engineId: number) => {
+    const response = await api.get(`/engines/${engineId}/life-limit-alerts`);
+    return response.data;
+  },
+  
+  getAllLifeLimitAlerts: async () => {
+    const response = await api.get('/life-limit-alerts');
+    return response.data;
+  },
+  
+  // Next Maintenance Info
+  getNextMaintenance: async (engineId: number) => {
+    const response = await api.get(`/engines/${engineId}/next-maintenance`);
+    return response.data;
+  },
 };
 
 // =============== TESTS ===============

@@ -48,7 +48,7 @@ const Dashboard: React.FC = () => {
           for (const comp of components) {
               if (comp.lifeLimit > 0) { // Only consider components with a life limit
                   allComponents.push({
-                      id: `${engine.serialNumber}-${comp.serialNumber}`,
+                      id: `${engine.id}-${comp.id}-${comp.serialNumber}`,
                       engineSerialNumber: engine.serialNumber,
                       description: comp.description,
                       partNumber: comp.partNumber,

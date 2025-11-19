@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useRefetch } from '../hooks/useData';
 import { testsApi, enginesApi } from '../lib/client.ts';
 import { testTypesApi, brakeTypesApi, documentsApi as newDocsApi } from '../lib/newApis.ts';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../context/AuthContext';
 import type { Test, TestType, BrakeType } from '../types';
 import { PencilIcon, TrashIcon, PaperclipIcon, PlusIcon } from '../constants';
 import Modal from '../components/Modal';
