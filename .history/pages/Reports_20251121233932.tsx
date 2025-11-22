@@ -253,11 +253,6 @@ const Reports: React.FC = () => {
             const totalTests = reportData.filter(i => i.type === 'Test').length;
             const totalMaintenance = reportData.filter(i => i.type === 'Bakım').length;
             
-            // Toplam Test Süresi Hesaplama
-            const totalTestDuration = reportData
-                .filter(i => i.type === 'Test' && i.details?.duration)
-                .reduce((acc, curr) => acc + Number(curr.details.duration), 0);
-
             doc.setFontSize(14);
             doc.text('Yönetici Özeti', 14, 45);
             
@@ -265,26 +260,9 @@ const Reports: React.FC = () => {
                 ['Toplam Aktivite', totalEvents],
                 ['Kritik/Major Arızalar', criticalFaults],
                 ['Tamamlanan Testler', totalTests],
-                ['Toplam Test Süresi', `${totalTestDuration.toFixed(1)} saat`],
                 ['Yapılan Bakımlar', totalMaintenance],
                 ['Filtre Aralığı', dateRange === 'all' ? 'Tümü' : `Son ${dateRange} Gün`]
             ];
-
-            // Türkçe Karakter Düzeltme Fonksiyonu
-            const replaceTurkishChars = (text: string) => {
-                if (!text) return '';
-                const map: {[key: string]: string} = {
-                    'ğ': 'g', 'Ğ': 'G',
-                    'ü': 'u', 'Ü': 'U',
-                    'ş': 's', 'Ş': 'S',
-                    'ı': 'i', 'İ': 'I',
-                    'ö': 'o', 'Ö': 'O',
-                    'ç': 'c', 'Ç': 'C'
-                };
-                return text.replace(/[ğĞüÜşŞıİöÖçÇ]/g, function(match) {
-                    return map[match];
-                });
-            };
 
             autoTable(doc, {
                 startY: 50,
@@ -313,9 +291,9 @@ const Reports: React.FC = () => {
                     head: [['Tarih', 'Motor', 'Derece', 'Açıklama']],
                     body: criticalFaultList.map(f => [
                         new Date(f.date).toLocaleDateString('tr-TR'),
-                        replaceTurkishChars(f.engineSerial),
-                        replaceTurkishChars(f.subType),
-                        replaceTurkishChars(f.description)
+                        f.engineSerial,
+                        f.subType,
+                        f.description
                     ]),
                     theme: 'grid',
                     headStyles: { fillColor: [220, 53, 69] },
@@ -333,11 +311,11 @@ const Reports: React.FC = () => {
                 head: [['Tarih', 'Motor', 'Tip', 'Detay', 'Açıklama', 'Personel']],
                 body: reportData.map(item => [
                     new Date(item.date).toLocaleDateString('tr-TR'),
-                    replaceTurkishChars(item.engineSerial),
-                    replaceTurkishChars(item.type),
-                    replaceTurkishChars(item.subType),
-                    replaceTurkishChars(item.description.length > 30 ? item.description.substring(0, 30) + '...' : item.description),
-                    replaceTurkishChars(item.user)
+                    item.engineSerial,
+                    item.type,
+                    item.subType,
+                    item.description.length > 30 ? item.description.substring(0, 30) + '...' : item.description,
+                    item.user
                 ]),
                 styles: { fontSize: 8 },
                 headStyles: { fillColor: [52, 73, 94] },

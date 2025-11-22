@@ -350,15 +350,9 @@ router.get('/swaps/:id', async (req, res) => {
 router.post('/swaps', async (req, res) => {
   try {
     const { engineId, componentInstalledId, componentRemovedId, swapDate, swapType, assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber } = req.body;
-    
-    // Handle null values for IDs (DB has NOT NULL constraint)
-    // 0 represents "no component ID" (e.g. from Build Report update)
-    const safeInstalledId = componentInstalledId || 0;
-    const safeRemovedId = componentRemovedId || 0;
-
     const result = await dbRun(
       'INSERT INTO swaps (engineId, componentInstalledId, componentRemovedId, swapDate, swapType, assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [engineId, safeInstalledId, safeRemovedId, swapDate, swapType || 'Component', assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber]
+      [engineId, componentInstalledId, componentRemovedId, swapDate, swapType || 'Component', assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber]
     );
     res.json({ id: result.id, ...req.body });
   } catch (err) {
@@ -369,14 +363,9 @@ router.post('/swaps', async (req, res) => {
 router.put('/swaps/:id', async (req, res) => {
   try {
     const { engineId, componentInstalledId, componentRemovedId, swapDate, swapType, assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber } = req.body;
-    
-    // Handle null values for IDs
-    const safeInstalledId = componentInstalledId || 0;
-    const safeRemovedId = componentRemovedId || 0;
-
     await dbRun(
       'UPDATE swaps SET engineId = ?, componentInstalledId = ?, componentRemovedId = ?, swapDate = ?, swapType = ?, assemblyGroup = ?, documentId = ?, userName = ?, installedSerialNumber = ?, removedSerialNumber = ? WHERE id = ?',
-      [engineId, safeInstalledId, safeRemovedId, swapDate, swapType || 'Component', assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber, req.params.id]
+      [engineId, componentInstalledId, componentRemovedId, swapDate, swapType || 'Component', assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber, req.params.id]
     );
     res.json({ id: req.params.id, ...req.body });
   } catch (err) {

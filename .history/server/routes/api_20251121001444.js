@@ -350,15 +350,9 @@ router.get('/swaps/:id', async (req, res) => {
 router.post('/swaps', async (req, res) => {
   try {
     const { engineId, componentInstalledId, componentRemovedId, swapDate, swapType, assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber } = req.body;
-    
-    // Handle null values for IDs (DB has NOT NULL constraint)
-    // 0 represents "no component ID" (e.g. from Build Report update)
-    const safeInstalledId = componentInstalledId || 0;
-    const safeRemovedId = componentRemovedId || 0;
-
     const result = await dbRun(
       'INSERT INTO swaps (engineId, componentInstalledId, componentRemovedId, swapDate, swapType, assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [engineId, safeInstalledId, safeRemovedId, swapDate, swapType || 'Component', assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber]
+      [engineId, componentInstalledId, componentRemovedId, swapDate, swapType || 'Component', assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber]
     );
     res.json({ id: result.id, ...req.body });
   } catch (err) {
@@ -369,14 +363,9 @@ router.post('/swaps', async (req, res) => {
 router.put('/swaps/:id', async (req, res) => {
   try {
     const { engineId, componentInstalledId, componentRemovedId, swapDate, swapType, assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber } = req.body;
-    
-    // Handle null values for IDs
-    const safeInstalledId = componentInstalledId || 0;
-    const safeRemovedId = componentRemovedId || 0;
-
     await dbRun(
       'UPDATE swaps SET engineId = ?, componentInstalledId = ?, componentRemovedId = ?, swapDate = ?, swapType = ?, assemblyGroup = ?, documentId = ?, userName = ?, installedSerialNumber = ?, removedSerialNumber = ? WHERE id = ?',
-      [engineId, safeInstalledId, safeRemovedId, swapDate, swapType || 'Component', assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber, req.params.id]
+      [engineId, componentInstalledId, componentRemovedId, swapDate, swapType || 'Component', assemblyGroup, documentId, userName, installedSerialNumber, removedSerialNumber, req.params.id]
     );
     res.json({ id: req.params.id, ...req.body });
   } catch (err) {
@@ -740,53 +729,6 @@ router.get('/engines/:id/activities', async (req, res) => {
     
     res.json(activities);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// =============== BUILD REPORT HISTORY ===============
-router.get('/engines/:id/build-report-history', async (req, res) => {
-  try {
-    const history = await dbAll(
-      'SELECT * FROM build_report_history WHERE engineId = ? ORDER BY uploadDate DESC',
-      [req.params.id]
-    );
-    
-    // Parse components JSON for each history item
-    const parsedHistory = history.map(item => ({
-      ...item,
-      components: JSON.parse(item.components || '[]')
-    }));
-    
-    res.json(parsedHistory);
-  } catch (err) {
-    console.error('Get BR history error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/engines/:id/build-report-history', async (req, res) => {
-  try {
-    const { uploadedBy, fileName, components, addedCount, updatedCount, removedCount } = req.body;
-    const engineId = parseInt(req.params.id);
-    
-    const result = await dbRun(
-      'INSERT INTO build_report_history (engineId, uploadDate, uploadedBy, fileName, components, addedCount, updatedCount, removedCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        engineId, 
-        new Date().toISOString(), 
-        uploadedBy, 
-        fileName, 
-        JSON.stringify(components), 
-        addedCount || 0, 
-        updatedCount || 0, 
-        removedCount || 0
-      ]
-    );
-    
-    res.json({ id: result.id, ...req.body });
-  } catch (err) {
-    console.error('Save BR history error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1386,24 +1328,6 @@ router.get('/maintenance-plans/due', async (req, res) => {
     res.json(duePlans);
   } catch (err) {
     console.error('Due maintenance plans error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get comprehensive maintenance history
-router.get('/maintenance-history', async (req, res) => {
-  try {
-    const history = await dbAll(`
-      SELECT mh.*, mp.planType, mp.maintenanceType, mp.description as planDescription,
-             e.serialNumber as engineSerialNumber, e.model as engineModel
-      FROM maintenance_history mh
-      LEFT JOIN maintenance_plans mp ON mh.maintenancePlanId = mp.id
-      LEFT JOIN engines e ON mh.engineId = e.id
-      ORDER BY mh.performedDate DESC
-    `);
-    res.json(history);
-  } catch (err) {
-    console.error('Maintenance history error:', err);
     res.status(500).json({ error: err.message });
   }
 });

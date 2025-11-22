@@ -1,12 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '../hooks/useData';
-import { enginesApi, faultsApi, testsApi, swapsApi, inventoryApi } from '../lib/client';
+import { enginesApi, faultsApi, testsApi, swapsApi } from '../lib/client';
 import { maintenancePlansApi } from '../lib/newApis';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { showSuccess, showError } from '../utils/toast';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 interface ReportItem {
     id: string;
@@ -25,15 +23,11 @@ const Reports: React.FC = () => {
     const faults = useQuery(() => faultsApi.getAll(), []);
     const tests = useQuery(() => testsApi.getAll(), []);
     const swaps = useQuery(() => swapsApi.getAll(), []);
-    const inventory = useQuery(() => inventoryApi.getAll(), []);
     const maintenanceHistory = useQuery(() => maintenancePlansApi.getAllHistory(), []);
 
     // Filtre State'leri
     const [dateRange, setDateRange] = useState<'all' | '7' | '30' | '90'>('30');
-    const [reportScope, setReportScope] = useState<'fleet' | 'engine' | 'component'>('fleet');
     const [selectedEngineId, setSelectedEngineId] = useState<string>('');
-    const [selectedComponentSerial, setSelectedComponentSerial] = useState<string>('');
-    const [componentSearchTerm, setComponentSearchTerm] = useState('');
     
     const [activityTypes, setActivityTypes] = useState({
         tests: true,
@@ -64,35 +58,20 @@ const Reports: React.FC = () => {
             return new Date(dateStr) >= cutoffDate;
         };
 
-        const isScopeValid = (itemEngineId: number | string | undefined, itemComponentSerial?: string, itemComponentId?: number) => {
-            if (reportScope === 'fleet') return true;
-            
-            if (reportScope === 'engine') {
-                return selectedEngineId ? itemEngineId?.toString() === selectedEngineId : true;
-            }
-            
-            if (reportScope === 'component') {
-                if (!selectedComponentSerial) return true;
-                // Parça bazlı filtreleme:
-                // 1. Swap: installedSerialNumber veya removedSerialNumber eşleşmeli
-                // 2. Fault: componentId üzerinden veya inventory'den bulup eşleşmeli (bu karmaşık, şimdilik basit tutuyoruz)
-                // 3. Test: Genelde parça bazlı değil motor bazlıdır, hariç tutulabilir veya motor üzerinden gösterilebilir.
-                return false; // Default false, aşağıda özel kontrol yapacağız
-            }
-            
-            return true;
+        const isEngineValid = (engineId: number | string) => {
+            if (!selectedEngineId) return true;
+            return engineId.toString() === selectedEngineId;
         };
 
-        const getEngineSerial = (id: number | string | undefined) => {
-            if (!id) return 'Bilinmiyor';
+        const getEngineSerial = (id: number | string) => {
             const engine = engines.find(e => e.id.toString() === id.toString());
-            return engine ? engine.serialNumber : 'Depo/Harici';
+            return engine ? engine.serialNumber : 'Bilinmiyor';
         };
 
-        // 1. Testler (Sadece Motor veya Filo modunda anlamlı)
-        if (activityTypes.tests && reportScope !== 'component') {
+        // 1. Testler
+        if (activityTypes.tests) {
             tests.forEach(test => {
-                if (isDateValid(test.testDate) && isScopeValid(test.engineId)) {
+                if (isDateValid(test.testDate) && isEngineValid(test.engineId)) {
                     if (subFilters.testType === 'all' || test.testType === subFilters.testType) {
                         data.push({
                             id: `test-${test.id}`,
@@ -112,20 +91,7 @@ const Reports: React.FC = () => {
         // 2. Arızalar
         if (activityTypes.faults) {
             faults.forEach(fault => {
-                let include = false;
-                if (isDateValid(fault.reportDate)) {
-                    if (reportScope === 'component') {
-                        // Parça bazlı arama: componentId varsa inventory'den seri no kontrol et
-                        if (fault.componentId && inventory) {
-                             const comp = inventory.find(i => i.id === fault.componentId);
-                             if (comp && comp.serialNumber === selectedComponentSerial) include = true;
-                        }
-                    } else {
-                        include = isScopeValid(fault.engineId);
-                    }
-                }
-
-                if (include) {
+                if (isDateValid(fault.reportDate) && isEngineValid(fault.engineId)) {
                     if (subFilters.faultSeverity === 'all' || fault.severity === subFilters.faultSeverity) {
                         data.push({
                             id: `fault-${fault.id}`,
@@ -145,19 +111,12 @@ const Reports: React.FC = () => {
         // 3. Parça Değişimleri
         if (activityTypes.swaps) {
             swaps.forEach(swap => {
-                let include = false;
-                if (isDateValid(swap.swapDate)) {
-                    if (reportScope === 'component') {
-                        if (swap.installedSerialNumber === selectedComponentSerial || 
-                            swap.removedSerialNumber === selectedComponentSerial) {
-                            include = true;
-                        }
-                    } else {
-                        include = isScopeValid(swap.engineId);
-                    }
-                }
-
-                if (include) {
+                if (isDateValid(swap.swapDate) && isEngineValid(swap.engineId)) {
+                    // Basit bir swapType mantığı kuralım (Parça vs Montaj Grubu)
+                    // Backend'de swapType 'Component' veya 'Assembly' olarak geliyor olabilir
+                    // Ancak kullanıcı "Sökme/Takma" gibi bir ayrım istemiş olabilir ama veri yapısı "Swap" (Değişim) üzerine.
+                    // Şimdilik veritabanındaki swapType'a göre filtreleyelim.
+                    
                     if (subFilters.swapType === 'all' || swap.swapType === subFilters.swapType) {
                         data.push({
                             id: `swap-${swap.id}`,
@@ -174,10 +133,10 @@ const Reports: React.FC = () => {
             });
         }
 
-        // 4. Bakım Geçmişi (Motor veya Filo modunda)
-        if (activityTypes.maintenance && reportScope !== 'component') {
+        // 4. Bakım Geçmişi
+        if (activityTypes.maintenance) {
             maintenanceHistory.forEach(m => {
-                if (isDateValid(m.performedDate) && isScopeValid(m.engineId)) {
+                if (isDateValid(m.performedDate) && isEngineValid(m.engineId)) {
                     if (subFilters.maintenanceType === 'all' || m.maintenanceType === subFilters.maintenanceType) {
                         data.push({
                             id: `maint-${m.id}`,
@@ -197,14 +156,9 @@ const Reports: React.FC = () => {
         // Tarihe göre sırala (Yeniden eskiye)
         return data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    }, [engines, faults, tests, swaps, maintenanceHistory, inventory, dateRange, reportScope, selectedEngineId, selectedComponentSerial, activityTypes, subFilters]);
+    }, [engines, faults, tests, swaps, maintenanceHistory, dateRange, selectedEngineId, activityTypes, subFilters]);
 
-    const handleExport = (format: 'excel' | 'csv' | 'pdf') => {
-        if (format === 'pdf') {
-            handlePDFExport();
-            return;
-        }
-
+    const handleExport = (format: 'excel' | 'csv') => {
         try {
             const exportData = reportData.map(item => ({
                 'Tarih': new Date(item.date).toLocaleDateString('tr-TR'),
@@ -219,12 +173,10 @@ const Reports: React.FC = () => {
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Rapor");
 
-            const fileName = `Rapor_${reportScope}_${new Date().toISOString().split('T')[0]}`;
-            
             if (format === 'excel') {
-                XLSX.writeFile(wb, `${fileName}.xlsx`);
+                XLSX.writeFile(wb, `Rapor_${new Date().toISOString().split('T')[0]}.xlsx`);
             } else {
-                XLSX.writeFile(wb, `${fileName}.csv`);
+                XLSX.writeFile(wb, `Rapor_${new Date().toISOString().split('T')[0]}.csv`);
             }
             
             showSuccess('Rapor başarıyla indirildi');
@@ -234,144 +186,11 @@ const Reports: React.FC = () => {
         }
     };
 
-    const handlePDFExport = () => {
-        try {
-            const doc = new jsPDF();
-            const today = new Date().toLocaleDateString('tr-TR');
-            
-            // Başlık
-            doc.setFontSize(20);
-            doc.text('PM Logbook - Yönetici Raporu', 14, 22);
-            
-            doc.setFontSize(10);
-            doc.text(`Rapor Tarihi: ${today}`, 14, 28);
-            doc.text(`Kapsam: ${reportScope === 'fleet' ? 'Tüm Filo' : reportScope === 'engine' ? `Motor: ${engines?.find(e => e.id.toString() === selectedEngineId)?.serialNumber}` : `Parça: ${selectedComponentSerial}`}`, 14, 33);
-
-            // --- YÖNETİCİ ÖZETİ ---
-            const totalEvents = reportData.length;
-            const criticalFaults = reportData.filter(i => i.type === 'Arıza' && (i.subType === 'Critical' || i.subType === 'Major')).length;
-            const totalTests = reportData.filter(i => i.type === 'Test').length;
-            const totalMaintenance = reportData.filter(i => i.type === 'Bakım').length;
-            
-            // Toplam Test Süresi Hesaplama
-            const totalTestDuration = reportData
-                .filter(i => i.type === 'Test' && i.details?.duration)
-                .reduce((acc, curr) => acc + Number(curr.details.duration), 0);
-
-            doc.setFontSize(14);
-            doc.text('Yönetici Özeti', 14, 45);
-            
-            const summaryData = [
-                ['Toplam Aktivite', totalEvents],
-                ['Kritik/Major Arızalar', criticalFaults],
-                ['Tamamlanan Testler', totalTests],
-                ['Toplam Test Süresi', `${totalTestDuration.toFixed(1)} saat`],
-                ['Yapılan Bakımlar', totalMaintenance],
-                ['Filtre Aralığı', dateRange === 'all' ? 'Tümü' : `Son ${dateRange} Gün`]
-            ];
-
-            // Türkçe Karakter Düzeltme Fonksiyonu
-            const replaceTurkishChars = (text: string) => {
-                if (!text) return '';
-                const map: {[key: string]: string} = {
-                    'ğ': 'g', 'Ğ': 'G',
-                    'ü': 'u', 'Ü': 'U',
-                    'ş': 's', 'Ş': 'S',
-                    'ı': 'i', 'İ': 'I',
-                    'ö': 'o', 'Ö': 'O',
-                    'ç': 'c', 'Ç': 'C'
-                };
-                return text.replace(/[ğĞüÜşŞıİöÖçÇ]/g, function(match) {
-                    return map[match];
-                });
-            };
-
-            autoTable(doc, {
-                startY: 50,
-                head: [['Metrik', 'Değer']],
-                body: summaryData,
-                theme: 'striped',
-                headStyles: { fillColor: [41, 128, 185] },
-                styles: { fontSize: 10 }
-            });
-
-            // Kritik Arızalar Listesi (Varsa)
-            const criticalFaultList = reportData
-                .filter(i => i.type === 'Arıza' && (i.subType === 'Critical' || i.subType === 'Major'))
-                .slice(0, 5); // Sadece ilk 5
-
-            let lastY = (doc as any).lastAutoTable.finalY + 15;
-
-            if (criticalFaultList.length > 0) {
-                doc.setFontSize(12);
-                doc.setTextColor(220, 53, 69); // Kırmızı
-                doc.text('Dikkat Gerektiren Kritik Olaylar (Son 5)', 14, lastY);
-                doc.setTextColor(0, 0, 0); // Siyah
-
-                autoTable(doc, {
-                    startY: lastY + 5,
-                    head: [['Tarih', 'Motor', 'Derece', 'Açıklama']],
-                    body: criticalFaultList.map(f => [
-                        new Date(f.date).toLocaleDateString('tr-TR'),
-                        replaceTurkishChars(f.engineSerial),
-                        replaceTurkishChars(f.subType),
-                        replaceTurkishChars(f.description)
-                    ]),
-                    theme: 'grid',
-                    headStyles: { fillColor: [220, 53, 69] },
-                    styles: { fontSize: 9 }
-                });
-                lastY = (doc as any).lastAutoTable.finalY + 15;
-            }
-
-            // Ana Veri Tablosu
-            doc.setFontSize(14);
-            doc.text('Detaylı Aktivite Dökümü', 14, lastY);
-
-            autoTable(doc, {
-                startY: lastY + 5,
-                head: [['Tarih', 'Motor', 'Tip', 'Detay', 'Açıklama', 'Personel']],
-                body: reportData.map(item => [
-                    new Date(item.date).toLocaleDateString('tr-TR'),
-                    replaceTurkishChars(item.engineSerial),
-                    replaceTurkishChars(item.type),
-                    replaceTurkishChars(item.subType),
-                    replaceTurkishChars(item.description.length > 30 ? item.description.substring(0, 30) + '...' : item.description),
-                    replaceTurkishChars(item.user)
-                ]),
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [52, 73, 94] },
-                alternateRowStyles: { fillColor: [240, 240, 240] }
-            });
-
-            // Sayfa numaraları ekle
-            const pageCount = (doc as any).internal.getNumberOfPages();
-            for(let i = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFontSize(8);
-                doc.text(`Sayfa ${i} / ${pageCount}`, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 10);
-            }
-
-            doc.save(`Rapor_${reportScope}_${new Date().toISOString().split('T')[0]}.pdf`);
-            showSuccess('PDF raporu oluşturuldu');
-        } catch (error) {
-            console.error(error);
-            showError('PDF oluşturulurken hata oluştu');
-        }
-    };
-
     if (!engines || !faults || !tests || !swaps || !maintenanceHistory) return <LoadingSpinner text="Rapor verileri yükleniyor..." />;
 
     // Benzersiz Alt Tipleri Bul (Filtreleme için)
     const testTypes = Array.from(new Set(tests.map(t => t.testType)));
-    const faultSeverities = ['Critical', 'Major', 'Minor'];
-
-    // Filtrelenmiş Inventory Listesi (Parça arama için)
-    const filteredInventory = inventory?.filter(item => 
-        item.serialNumber.toLowerCase().includes(componentSearchTerm.toLowerCase()) || 
-        item.partNumber.toLowerCase().includes(componentSearchTerm.toLowerCase()) ||
-        item.description.toLowerCase().includes(componentSearchTerm.toLowerCase())
-    ).slice(0, 50) || []; // Performans için ilk 50
+    const faultSeverities = ['Critical', 'Major', 'Minor']; // Sabit de olabilir
 
     return (
         <div className="space-y-6">
@@ -383,91 +202,10 @@ const Reports: React.FC = () => {
             {/* Filtreleme Paneli */}
             <div className="bg-brand-card p-6 rounded-lg border border-brand-border space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* 1. Kapsam ve Tarih Seçimi */}
+                    {/* 1. Tarih ve Motor Seçimi */}
                     <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-white border-b border-brand-border pb-2">Rapor Kapsamı</h3>
+                        <h3 className="text-lg font-semibold text-white border-b border-brand-border pb-2">Genel Filtreler</h3>
                         
-                        {/* Scope Selector */}
-                        <div className="flex gap-4 bg-brand-dark p-2 rounded-md">
-                            <label className="flex items-center space-x-2 cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    value="fleet" 
-                                    checked={reportScope === 'fleet'}
-                                    onChange={(e) => { setReportScope('fleet'); setSelectedEngineId(''); setSelectedComponentSerial(''); }}
-                                    className="form-radio text-brand-primary"
-                                />
-                                <span className="text-white">Tüm Filo</span>
-                            </label>
-                            <label className="flex items-center space-x-2 cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    value="engine" 
-                                    checked={reportScope === 'engine'}
-                                    onChange={(e) => { setReportScope('engine'); setSelectedComponentSerial(''); }}
-                                    className="form-radio text-brand-primary"
-                                />
-                                <span className="text-white">Motor Bazlı</span>
-                            </label>
-                            <label className="flex items-center space-x-2 cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    value="component" 
-                                    checked={reportScope === 'component'}
-                                    onChange={(e) => { setReportScope('component'); setSelectedEngineId(''); }}
-                                    className="form-radio text-brand-primary"
-                                />
-                                <span className="text-white">Parça/Montaj Grubu</span>
-                            </label>
-                        </div>
-
-                        {/* Conditional Selectors */}
-                        {reportScope === 'engine' && (
-                            <div>
-                                <label className="block text-sm text-brand-light mb-2">Motor Seçimi</label>
-                                <select
-                                    value={selectedEngineId}
-                                    onChange={(e) => setSelectedEngineId(e.target.value)}
-                                    className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white text-sm focus:border-brand-primary focus:outline-none"
-                                >
-                                    <option value="">Motor Seçiniz...</option>
-                                    {engines.map(e => (
-                                        <option key={e.id} value={e.id}>{e.serialNumber} ({e.model})</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-
-                        {reportScope === 'component' && (
-                            <div className="space-y-2">
-                                <label className="block text-sm text-brand-light">Parça Ara ve Seç</label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Seri No, Parça No veya İsim ara..." 
-                                    value={componentSearchTerm}
-                                    onChange={(e) => setComponentSearchTerm(e.target.value)}
-                                    className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white text-sm mb-2"
-                                />
-                                <select
-                                    value={selectedComponentSerial}
-                                    onChange={(e) => setSelectedComponentSerial(e.target.value)}
-                                    className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white text-sm focus:border-brand-primary focus:outline-none"
-                                    size={5}
-                                >
-                                    <option value="">Parça Seçiniz...</option>
-                                    {filteredInventory.map(item => (
-                                        <option key={item.id} value={item.serialNumber}>
-                                            {item.description} - {item.serialNumber} ({item.partNumber})
-                                        </option>
-                                    ))}
-                                </select>
-                                {selectedComponentSerial && (
-                                    <p className="text-xs text-green-400">Seçili: {selectedComponentSerial}</p>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Date Range */}
                         <div>
                             <label className="block text-sm text-brand-light mb-2">Tarih Aralığı</label>
                             <div className="flex gap-2">
@@ -486,6 +224,20 @@ const Reports: React.FC = () => {
                                 ))}
                             </div>
                         </div>
+
+                        <div>
+                            <label className="block text-sm text-brand-light mb-2">Motor Seçimi</label>
+                            <select
+                                value={selectedEngineId}
+                                onChange={(e) => setSelectedEngineId(e.target.value)}
+                                className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white text-sm focus:border-brand-primary focus:outline-none"
+                            >
+                                <option value="">Tüm Motorlar</option>
+                                {engines.map(e => (
+                                    <option key={e.id} value={e.id}>{e.serialNumber} ({e.model})</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     {/* 2. Faaliyet Seçimi ve Alt Filtreler */}
@@ -494,17 +246,16 @@ const Reports: React.FC = () => {
                         
                         {/* Testler */}
                         <div className="flex items-center justify-between">
-                            <label className={`flex items-center space-x-2 cursor-pointer ${reportScope === 'component' ? 'opacity-50' : ''}`}>
+                            <label className="flex items-center space-x-2 cursor-pointer">
                                 <input 
                                     type="checkbox" 
                                     checked={activityTypes.tests}
                                     onChange={(e) => setActivityTypes({...activityTypes, tests: e.target.checked})}
-                                    disabled={reportScope === 'component'}
                                     className="form-checkbox text-brand-primary rounded bg-brand-dark border-brand-border"
                                 />
-                                <span className="text-white">Testler {reportScope === 'component' && '(Parça için aktif değil)'}</span>
+                                <span className="text-white">Testler</span>
                             </label>
-                            {activityTypes.tests && reportScope !== 'component' && (
+                            {activityTypes.tests && (
                                 <select 
                                     value={subFilters.testType}
                                     onChange={(e) => setSubFilters({...subFilters, testType: e.target.value})}
@@ -565,17 +316,16 @@ const Reports: React.FC = () => {
 
                         {/* Bakım Geçmişi */}
                         <div className="flex items-center justify-between">
-                            <label className={`flex items-center space-x-2 cursor-pointer ${reportScope === 'component' ? 'opacity-50' : ''}`}>
+                            <label className="flex items-center space-x-2 cursor-pointer">
                                 <input 
                                     type="checkbox" 
                                     checked={activityTypes.maintenance}
                                     onChange={(e) => setActivityTypes({...activityTypes, maintenance: e.target.checked})}
-                                    disabled={reportScope === 'component'}
                                     className="form-checkbox text-brand-primary rounded bg-brand-dark border-brand-border"
                                 />
-                                <span className="text-white">Bakım Geçmişi {reportScope === 'component' && '(Parça için aktif değil)'}</span>
+                                <span className="text-white">Bakım Geçmişi</span>
                             </label>
-                            {activityTypes.maintenance && reportScope !== 'component' && (
+                            {activityTypes.maintenance && (
                                 <select 
                                     value={subFilters.maintenanceType}
                                     onChange={(e) => setSubFilters({...subFilters, maintenanceType: e.target.value})}
@@ -606,7 +356,7 @@ const Reports: React.FC = () => {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        Excel
+                        Excel İndir
                     </button>
                     <button
                         onClick={() => handleExport('csv')}
@@ -616,17 +366,7 @@ const Reports: React.FC = () => {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        CSV
-                    </button>
-                    <button
-                        onClick={() => handleExport('pdf')}
-                        disabled={reportData.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        PDF
+                        CSV İndir
                     </button>
                 </div>
             </div>

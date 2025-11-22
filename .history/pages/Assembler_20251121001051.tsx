@@ -662,29 +662,21 @@ const Assembler: React.FC = () => {
                                             <label className="block text-sm font-medium text-brand-light mb-2">
                                                 3. Depodan TAKILACAK Parçayı Seçin
                                             </label>
-                                            <input
-                                                type="text"
-                                                placeholder="Parça ara (Tanım, PN veya SN)..."
-                                                value={installSearchQuery}
-                                                onChange={(e) => setInstallSearchQuery(e.target.value)}
-                                                className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white mb-2 text-sm focus:border-brand-primary focus:outline-none"
-                                            />
                                             <select
                                                 value={swapState.installId}
                                                 onChange={(e) => setSwapState({...swapState, installId: e.target.value})}
                                                 className="w-full bg-brand-dark border border-brand-border rounded-md p-2 text-white"
                                                 required
-                                                size={5}
                                             >
                                                 <option value="">-- Depodan takılacak parçayı seçin --</option>
-                                                {filteredInventoryItems.length > 0 ? (
-                                                    filteredInventoryItems.map(i => (
+                                                {compatibleInventoryItems.length > 0 ? (
+                                                    compatibleInventoryItems.map(i => (
                                                         <option key={i.id} value={i.id}>
                                                             {i.description} (PN: {i.partNumber}, SN: {i.serialNumber}) - {i.currentHours ? `${i.currentHours.toFixed(1)}h` : '0h'} - {i.location}
                                                         </option>
                                                     ))
                                                 ) : (
-                                                    <option value="" disabled>Eşleşen parça bulunamadı</option>
+                                                    <option value="" disabled>Depoda parça bulunamadı</option>
                                                 )}
                                             </select>
                                             {compatibleInventoryItems.length === 0 && (
