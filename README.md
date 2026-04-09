@@ -1,0 +1,185 @@
+# PM Logbook - Preventive Maintenance Logbook System
+
+A comprehensive engine maintenance tracking system built with React, Node.js, Express, and SQLite.
+
+## Features
+
+- **Engine Management**: Track engine status, hours, cycles, and components
+- **Test Management**: Log and track engine test activities
+- **Fault Tracking**: Report and manage engine faults with severity levels
+- **Component Assembly**: Track component swaps and installations
+- **Warehouse Management**: Manage inventory of spare parts and components
+- **Role-Based Access**: Different access levels for administrators, engineers, operators, and coordinators
+- **SQLite Database**: Reliable, file-based database with persistent storage
+
+## Technology Stack
+
+### Frontend
+- React 19.2.0
+- TypeScript
+- React Router DOM
+- Axios for API calls
+- Vite for build tooling
+
+### Backend
+- Node.js
+- Express 4.18.0
+- SQLite3 5.1.7
+- CORS enabled
+
+## Prerequisites
+
+- Node.js (v16 or higher)
+- npm or yarn
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd pm-logbook3010
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Create environment file (optional):
+```bash
+cp .env.example .env
+```
+
+## Running the Application
+
+### Development Mode
+
+Run both the backend server and frontend development server concurrently:
+
+```bash
+npm run dev
+```
+
+This will start:
+- Backend API server on `http://localhost:5000`
+- Frontend development server on `http://localhost:3002`
+
+### Production Mode
+
+1. Build the frontend:
+```bash
+npm run build
+```
+
+2. Start the production server:
+```bash
+npm start
+```
+
+The application will be available at `http://localhost:5000`
+
+## Default Users
+
+The application comes with pre-populated sample users:
+
+| Username | Password | Role |
+|----------|----------|------|
+| admin | adminpass | Administrator |
+| planner | plannerpass | Planning Engineer |
+| testop | testoppass | Test Operator |
+| fault | faultpass | Fault Coordinator |
+| assy | assypass | Assembly Engineer |
+| readonly | readonlypass | Quality Control Engineer |
+
+## Project Structure
+
+```
+pm-logbook3010/
+├── server/              # Backend server
+│   ├── database.js      # SQLite database setup and initialization
+│   ├── routes/
+│   │   └── api.js       # API routes
+│   └── index.js         # Express server
+├── api/                 # API client
+│   └── client.ts        # Axios API client
+├── components/          # React components
+├── context/             # React context providers
+├── hooks/               # Custom React hooks
+├── pages/               # Application pages
+├── types.ts             # TypeScript type definitions
+└── package.json         # Project dependencies
+```
+
+## API Endpoints
+
+### Users
+- `GET /api/users` - Get all users
+- `GET /api/users/:id` - Get user by ID
+- `GET /api/users/by-username/:username` - Get user by username
+- `POST /api/users` - Create new user
+
+### Engines
+- `GET /api/engines` - Get all engines
+- `GET /api/engines/:id` - Get engine by ID
+- `POST /api/engines` - Create new engine
+- `PUT /api/engines/:id` - Update engine
+- `DELETE /api/engines/:id` - Delete engine
+
+### Tests
+- `GET /api/tests` - Get all tests
+- `POST /api/tests` - Create new test
+- `PUT /api/tests/:id` - Update test
+- `DELETE /api/tests/:id` - Delete test
+
+### Faults
+- `GET /api/faults` - Get all faults
+- `POST /api/faults` - Create new fault
+- `PUT /api/faults/:id` - Update fault
+- `DELETE /api/faults/:id` - Delete fault
+
+### Swaps
+- `GET /api/swaps` - Get all swap activities
+- `POST /api/swaps` - Create new swap
+- `DELETE /api/swaps/:id` - Delete swap
+
+### Inventory
+- `GET /api/inventory` - Get all inventory items
+- `POST /api/inventory` - Create new inventory item
+- `DELETE /api/inventory/:id` - Delete inventory item
+
+## Database
+
+The application uses SQLite for data persistence. The database file (`pm-logbook.db`) is automatically created in the `server/` directory on first run.
+
+### Database Schema
+
+- **users**: User accounts and authentication
+- **engines**: Engine records with components and activity logs
+- **tests**: Test activity records
+- **faults**: Fault reports
+- **swaps**: Component swap activities
+- **inventory**: Warehouse inventory items
+- **documents**: File attachments (optional)
+
+## Development
+
+### Adding New Features
+
+1. Backend: Add routes in `server/routes/api.js`
+2. Frontend: Add API methods in `api/client.ts`
+3. Create/update React components in `components/` or `pages/`
+
+### Database Reset
+
+To reset the database with fresh sample data:
+1. Stop the server
+2. Delete `server/pm-logbook.db`
+3. Restart the server
+
+## License
+
+This project is private and proprietary.
+
+## Support
+
+For issues or questions, please contact the development team.

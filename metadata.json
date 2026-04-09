@@ -1,0 +1,5 @@
+
+{
+  "name": "PM Logbook",
+  "description": "An Engine Logbook System for tracking newly produced engines and engines undergoing testing, including modules for dashboards, engine management, fault reporting, test logging, and component assembly."
+}
