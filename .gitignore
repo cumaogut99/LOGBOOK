@@ -34,3 +34,6 @@ dist-ssr
 
 # Database — sadece server klasöründeki geçici db'leri ignore et, kök dizindekini dahil et
 server/*.db
+
+# LibreOffice lock files
+.~lock.*
