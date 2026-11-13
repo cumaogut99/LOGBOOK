@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
+const { ACTIVE_PERIODIC_STATUSES_SQL } = require('../constants/maintenance');
 
 // Helper function to promisify database operations
 const dbAll = (sql, params = []) => {
@@ -43,6 +44,20 @@ const parseEngine = (engine) => {
   }
   return engine;
 };
+
+// Stores a location change so it appears in the engine's activity history.
+const recordLocationChange = async (existingEngine, newLocation, changedBy) => {
+  const previousLocation = existingEngine.location || '';
+  if (newLocation === undefined || newLocation === previousLocation) {
+    return;
+  }
+  await dbRun(
+    'INSERT INTO engine_location_history (engineId, previousLocation, newLocation, changedBy, changedAt) VALUES (?, ?, ?, ?, ?)',
+    [existingEngine.id, previousLocation, newLocation, changedBy || null, new Date().toISOString()]
+  );
+};
+
+const formatLocation = (location) => location || 'Belirtilmemiş';
 
 // =============== USERS ===============
 router.get('/users', async (req, res) => {
@@ -91,6 +106,15 @@ router.get('/engines', async (req, res) => {
     const engines = await dbAll('SELECT * FROM engines');
     const parsedEngines = engines.map(parseEngine);
     res.json(parsedEngines);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/engines/count', async (req, res) => {
+  try {
+    const result = await dbGet('SELECT COUNT(*) as count FROM engines');
+    res.json({ count: result.count });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -190,6 +214,8 @@ router.put('/engines/:id', async (req, res) => {
       values
     );
 
+    await recordLocationChange(existingEngine, req.body.location, req.body.changedBy);
+
     // Güncellenmiş engine'i döndür
     const updatedEngine = await dbGet('SELECT * FROM engines WHERE id = ?', [req.params.id]);
     console.log('Update successful!');
@@ -274,15 +300,6 @@ router.post('/check-duplicates', async (req, res) => {
   } catch (error) {
     console.error('Duplicate check error:', error);
     res.status(500).json({ error: 'Çakışma kontrolü yapılamadı' });
-  }
-});
-
-router.get('/engines/count', async (req, res) => {
-  try {
-    const result = await dbGet('SELECT COUNT(*) as count FROM engines');
-    res.json({ count: result.count });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -778,6 +795,11 @@ router.get('/engines/:id/activities', async (req, res) => {
     
     // Get swaps
     const swaps = await dbAll('SELECT * FROM swaps WHERE engineId = ? ORDER BY swapDate DESC', [engineId]);
+
+    const locationChanges = await dbAll(
+      'SELECT * FROM engine_location_history WHERE engineId = ? ORDER BY changedAt DESC',
+      [engineId]
+    );
     
     // Combine and format activities
     const activities = [];
@@ -823,58 +845,22 @@ router.get('/engines/:id/activities', async (req, res) => {
       });
     });
     
+    locationChanges.forEach(change => {
+      activities.push({
+        type: 'Location',
+        details: `${formatLocation(change.previousLocation)} → ${formatLocation(change.newLocation)}`,
+        date: change.changedAt,
+        id: change.id,
+        changedBy: change.changedBy,
+        fullData: change
+      });
+    });
+
     // Sort by date (newest first)
     activities.sort((a, b) => new Date(b.date) - new Date(a.date));
     
     res.json(activities);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// =============== BUILD REPORT HISTORY ===============
-router.get('/engines/:id/build-report-history', async (req, res) => {
-  try {
-    const history = await dbAll(
-      'SELECT * FROM build_report_history WHERE engineId = ? ORDER BY uploadDate DESC',
-      [req.params.id]
-    );
-    
-    // Parse components JSON for each history item
-    const parsedHistory = history.map(item => ({
-      ...item,
-      components: JSON.parse(item.components || '[]')
-    }));
-    
-    res.json(parsedHistory);
-  } catch (err) {
-    console.error('Get BR history error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/engines/:id/build-report-history', async (req, res) => {
-  try {
-    const { uploadedBy, fileName, components, addedCount, updatedCount, removedCount } = req.body;
-    const engineId = parseInt(req.params.id);
-    
-    const result = await dbRun(
-      'INSERT INTO build_report_history (engineId, uploadDate, uploadedBy, fileName, components, addedCount, updatedCount, removedCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        engineId, 
-        new Date().toISOString(), 
-        uploadedBy, 
-        fileName, 
-        JSON.stringify(components), 
-        addedCount || 0, 
-        updatedCount || 0, 
-        removedCount || 0
-      ]
-    );
-    
-    res.json({ id: result.id, ...req.body });
-  } catch (err) {
-    console.error('Save BR history error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1214,112 +1200,6 @@ router.delete('/control-requests/:id', async (req, res) => {
   }
 });
 
-// =============== LIFE LIMIT ALERTS ===============
-// Get life limit alerts for an engine
-router.get('/engines/:id/life-limit-alerts', async (req, res) => {
-  try {
-    const engineId = parseInt(req.params.id);
-    const engine = await dbGet('SELECT * FROM engines WHERE id = ?', [engineId]);
-    
-    if (!engine) {
-      return res.status(404).json({ error: 'Engine not found' });
-    }
-    
-    const components = JSON.parse(engine.components || '[]');
-    const alerts = [];
-    
-    // Recursively check all components for life limit warnings
-    function checkComponents(comps, parentPath = '') {
-      comps.forEach(comp => {
-        if (comp.lifeLimit > 0) {
-          const remaining = comp.lifeLimit - comp.currentHours;
-          
-          // Critical: ≤10h, Warning: ≤50h
-          if (remaining <= 50) {
-            alerts.push({
-              engineId: engine.id,
-              engineSerialNumber: engine.serialNumber,
-              componentId: comp.id,
-              description: comp.description,
-              partNumber: comp.partNumber,
-              serialNumber: comp.serialNumber,
-              currentHours: comp.currentHours,
-              lifeLimit: comp.lifeLimit,
-              remaining: remaining,
-              status: remaining <= 10 ? 'critical' : 'warning',
-              createdAt: new Date().toISOString()
-            });
-          }
-        }
-        
-        if (comp.children && comp.children.length > 0) {
-          checkComponents(comp.children, `${parentPath}/${comp.description}`);
-        }
-      });
-    }
-    
-    checkComponents(components);
-    
-    // Sort by remaining hours (most critical first)
-    alerts.sort((a, b) => a.remaining - b.remaining);
-    
-    res.json(alerts);
-  } catch (err) {
-    console.error('Life limit alerts error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get all life limit alerts across all engines
-router.get('/life-limit-alerts', async (req, res) => {
-  try {
-    const engines = await dbAll('SELECT * FROM engines');
-    const allAlerts = [];
-    
-    for (const engine of engines) {
-      const components = JSON.parse(engine.components || '[]');
-      
-      function checkComponents(comps) {
-        comps.forEach(comp => {
-          if (comp.lifeLimit > 0) {
-            const remaining = comp.lifeLimit - comp.currentHours;
-            
-            if (remaining <= 50) {
-              allAlerts.push({
-                engineId: engine.id,
-                engineSerialNumber: engine.serialNumber,
-                componentId: comp.id,
-                description: comp.description,
-                partNumber: comp.partNumber,
-                serialNumber: comp.serialNumber,
-                currentHours: comp.currentHours,
-                lifeLimit: comp.lifeLimit,
-                remaining: remaining,
-                status: remaining <= 10 ? 'critical' : 'warning',
-                createdAt: new Date().toISOString()
-              });
-            }
-          }
-          
-          if (comp.children && comp.children.length > 0) {
-            checkComponents(comp.children);
-          }
-        });
-      }
-      
-      checkComponents(components);
-    }
-    
-    // Sort by remaining hours
-    allAlerts.sort((a, b) => a.remaining - b.remaining);
-    
-    res.json(allAlerts);
-  } catch (err) {
-    console.error('All life limit alerts error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // Get next maintenance info for an engine
 router.get('/engines/:id/next-maintenance', async (req, res) => {
   try {
@@ -1341,7 +1221,7 @@ router.get('/engines/:id/next-maintenance', async (req, res) => {
       `SELECT * FROM maintenance_plans 
        WHERE engineId = ? 
        AND maintenanceType = 'periodic' 
-       AND status IN ('Approved', 'Active')`,
+       AND status IN ${ACTIVE_PERIODIC_STATUSES_SQL}`,
       [engineId]
     );
     
@@ -1435,7 +1315,7 @@ router.get('/maintenance-plans/due', async (req, res) => {
        FROM maintenance_plans mp 
        JOIN engines e ON mp.engineId = e.id 
        WHERE mp.maintenanceType = 'periodic' 
-       AND mp.status IN ('Approved', 'Active')`
+       AND mp.status IN ${ACTIVE_PERIODIC_STATUSES_SQL}`
     );
     
     const duePlans = [];
@@ -1506,7 +1386,7 @@ router.post('/maintenance-plans/check-periodic', async (req, res) => {
        FROM maintenance_plans mp 
        JOIN engines e ON mp.engineId = e.id 
        WHERE mp.maintenanceType = 'periodic' 
-       AND mp.status IN ('Approved', 'Active')`
+       AND mp.status IN ${ACTIVE_PERIODIC_STATUSES_SQL}`
     );
     
     const newMaintenanceTasks = [];

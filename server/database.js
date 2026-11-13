@@ -402,6 +402,19 @@ function initializeDatabase() {
     db.run(`CREATE INDEX IF NOT EXISTS idx_life_limit_actions_alertId ON life_limit_actions(alertId)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_life_limit_actions_engineId ON life_limit_actions(engineId)`);
 
+    // Engine location changes; shown in the engine activity history.
+    db.run(`CREATE TABLE IF NOT EXISTS engine_location_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      engineId INTEGER NOT NULL,
+      previousLocation TEXT,
+      newLocation TEXT,
+      changedBy TEXT,
+      changedAt TEXT NOT NULL,
+      FOREIGN KEY (engineId) REFERENCES engines(id)
+    )`);
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_engine_location_history_engineId ON engine_location_history(engineId, changedAt)`);
+
     // Insert sample data if tables are empty
     insertSampleData();
   });

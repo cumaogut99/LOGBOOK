@@ -59,8 +59,9 @@ export const enginesApi = {
     return response.data;
   },
   
-  update: async (id: number, engine: Partial<Engine>): Promise<Engine> => {
-    const response = await api.put(`/engines/${id}`, engine);
+  // changedBy is recorded in the activity history when the location changes.
+  update: async (id: number, engine: Partial<Engine>, changedBy?: string): Promise<Engine> => {
+    const response = await api.put(`/engines/${id}`, { ...engine, changedBy });
     return response.data;
   },
   

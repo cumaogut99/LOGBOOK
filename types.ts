@@ -162,7 +162,7 @@ export interface Component {
 }
 
 export interface ActivityLogItem {
-  type: 'Swap' | 'Fault' | 'Test';
+  type: 'Swap' | 'Fault' | 'Test' | 'Location';
   details: string;
   date: string;
   severity?: Severity;
@@ -174,6 +174,8 @@ export interface ActivityLogItem {
   componentRemovedId?: number | null;
   installedSerialNumber?: string;
   removedSerialNumber?: string;
+  // Location-specific fields
+  changedBy?: string | null;
 }
 
 export interface BuildReportHistory {

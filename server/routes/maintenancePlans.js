@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../database');
+const { db, dbGet, dbRun } = require('../database');
+const { MAINTENANCE_TYPE, ACTIVE_PERIODIC_STATUSES_SQL } = require('../constants/maintenance');
 
 // Get all maintenance plans or filter by engineId
 router.get('/', (req, res) => {
@@ -41,56 +42,51 @@ router.get('/:id', (req, res) => {
 });
 
 // Create maintenance plan
-router.post('/', (req, res) => {
-  const { 
-    engineId, 
-    planType,
-    maintenanceType,
-    description, 
-    scheduledDate, 
-    dueHours, 
-    dueCycles,
-    periodicIntervalHours,
-    periodicIntervalCycles,
-    lastPerformedHours,
-    nextDueHours,
-    status, 
-    createdBy, 
-    createdAt 
-  } = req.body;
-  
-  db.run(
-    `INSERT INTO maintenance_plans 
-    (engineId, planType, maintenanceType, description, scheduledDate, dueHours, dueCycles, 
-     periodicIntervalHours, periodicIntervalCycles, lastPerformedHours, nextDueHours, status, createdBy, createdAt) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [engineId, planType, maintenanceType || 'one-time', description, scheduledDate, dueHours, dueCycles,
-     periodicIntervalHours, periodicIntervalCycles, lastPerformedHours, nextDueHours, status, createdBy, createdAt],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
+router.post('/', async (req, res) => {
+  try {
+    const plan = { ...req.body, maintenanceType: req.body.maintenanceType || MAINTENANCE_TYPE.ONE_TIME };
+
+    if (plan.maintenanceType === MAINTENANCE_TYPE.PERIODIC) {
+      const engine = await dbGet('SELECT totalHours, totalCycles FROM engines WHERE id = ?', [plan.engineId]);
+      if (!engine) {
+        return res.status(404).json({ error: 'Engine not found' });
       }
-      res.status(201).json({ 
-        id: this.lastID, 
-        engineId, 
-        planType,
-        maintenanceType,
-        description, 
-        scheduledDate, 
-        dueHours, 
-        dueCycles,
-        periodicIntervalHours,
-        periodicIntervalCycles,
-        lastPerformedHours,
-        nextDueHours,
-        status, 
-        createdBy, 
-        createdAt 
-      });
+      Object.assign(plan, buildPeriodicBaseline(plan, engine));
     }
-  );
+
+    const result = await dbRun(
+      `INSERT INTO maintenance_plans
+       (engineId, planType, maintenanceType, description, scheduledDate, dueHours, dueCycles,
+        periodicIntervalHours, periodicIntervalCycles, lastPerformedHours, lastPerformedCycles,
+        nextDueHours, nextDueCycles, status, createdBy, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [plan.engineId, plan.planType, plan.maintenanceType, plan.description, plan.scheduledDate,
+       plan.dueHours, plan.dueCycles, plan.periodicIntervalHours, plan.periodicIntervalCycles,
+       plan.lastPerformedHours, plan.lastPerformedCycles, plan.nextDueHours, plan.nextDueCycles,
+       plan.status, plan.createdBy, plan.createdAt]
+    );
+
+    res.status(201).json({ id: result.lastID, ...plan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
+
+/**
+ * A new periodic plan starts counting from the engine's current hours/cycles.
+ * Without this baseline, an engine with 800h and a 100h interval would show
+ * the brand-new plan as 700h overdue.
+ */
+function buildPeriodicBaseline(plan, engine) {
+  const lastPerformedHours = plan.lastPerformedHours ?? engine.totalHours ?? 0;
+  const lastPerformedCycles = plan.lastPerformedCycles ?? engine.totalCycles ?? 0;
+  return {
+    lastPerformedHours,
+    lastPerformedCycles,
+    nextDueHours: plan.periodicIntervalHours ? lastPerformedHours + plan.periodicIntervalHours : null,
+    nextDueCycles: plan.periodicIntervalCycles ? lastPerformedCycles + plan.periodicIntervalCycles : null,
+  };
+}
 
 // Update maintenance plan
 router.put('/:id', (req, res) => {
@@ -210,8 +206,8 @@ router.get('/check-periodic/:engineId', (req, res) => {
     
     // Get active periodic maintenance plans
     db.all(
-      `SELECT * FROM maintenance_plans 
-       WHERE engineId = ? AND maintenanceType = 'periodic' AND status = 'Active'`,
+      `SELECT * FROM maintenance_plans
+       WHERE engineId = ? AND maintenanceType = 'periodic' AND status IN ${ACTIVE_PERIODIC_STATUSES_SQL}`,
       [engineId],
       (err, plans) => {
         if (err) {
@@ -259,8 +255,8 @@ router.post('/update-next-service/:engineId', (req, res) => {
   
   // Get all active periodic plans
   db.all(
-    `SELECT * FROM maintenance_plans 
-     WHERE engineId = ? AND maintenanceType = 'periodic' AND status = 'Active'
+    `SELECT * FROM maintenance_plans
+     WHERE engineId = ? AND maintenanceType = 'periodic' AND status IN ${ACTIVE_PERIODIC_STATUSES_SQL}
      ORDER BY periodicIntervalHours ASC`,
     [engineId],
     (err, plans) => {
@@ -280,7 +276,11 @@ router.post('/update-next-service/:engineId', (req, res) => {
           res.status(500).json({ error: err.message });
           return;
         }
-        
+        if (!engine) {
+          res.status(404).json({ error: 'Engine not found' });
+          return;
+        }
+
         // Find closest maintenance
         let nextServiceHours = null;
         plans.forEach(plan => {

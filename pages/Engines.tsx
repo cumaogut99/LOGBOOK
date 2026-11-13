@@ -57,7 +57,7 @@ const Engines: React.FC = () => {
                 await enginesApi.create(engineData as Omit<Engine, 'id'>);
                 showSuccess('Motor başarıyla eklendi!');
             } else {
-                await enginesApi.update(editingEngine!.id!, engineData);
+                await enginesApi.update(editingEngine!.id!, engineData, user?.fullName);
                 showSuccess('Motor başarıyla güncellendi!');
             }
             refetch();
@@ -363,7 +363,7 @@ const EngineDetails: React.FC<{
         
         setIsUpdatingLocation(true);
         try {
-            await enginesApi.update(engine.id, { location: newLocation });
+            await enginesApi.update(engine.id, { location: newLocation }, user?.fullName);
             showSuccess(`Motor lokasyonu "${newLocation}" olarak güncellendi`);
             refetch();
         } catch (error) {
@@ -734,6 +734,11 @@ const EngineDetails: React.FC<{
                 borderColor = 'border-brand-secondary';
                 title = 'Test';
                 content = <div className="flex justify-between"><span>{item.details}</span><span className="font-semibold text-white">{item.duration} saat</span></div>;
+                break;
+            case 'Location':
+                borderColor = 'border-purple-500';
+                title = 'Lokasyon Değişikliği';
+                content = <p>{item.changedBy ? `Değiştiren: ${item.changedBy}` : ''}</p>;
                 break;
         }
 
