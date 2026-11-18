@@ -1,0 +1,6 @@
+# OCR motoru (Tesseract paketin içinde gelir, ayrıca program kurulmaz)
+tesserocr>=2.13
+# PDF sayfalarını görüntüye çevirmek için
+pymupdf>=1.24
+# Görsel okuma / ön işleme
+pillow>=10.0

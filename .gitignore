@@ -31,3 +31,7 @@ dist-ssr
 # Database
 server/*.db
 *.db
+
+# Python
+__pycache__/
+*.pyc
